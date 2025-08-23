@@ -159,7 +159,7 @@
   </style>
 </head>
 <body class="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 min-h-screen">
-  <header class="max-w-7xl mx-auto px-6 py-8">
+  <header class="max-w-full mx-auto px-8 py-8">
     <div class="text-center mb-8">
       <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
         <span style="color: #3b82f6;">✍️</span> Signature Studio
@@ -170,8 +170,8 @@
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-6 pb-24">
-    <section class="grid lg:grid-cols-3 gap-8 items-start">
+  <main class="max-w-full mx-auto px-8 pb-24">
+    <section class="grid lg:grid-cols-5 gap-8 items-start">
       <div class="lg:col-span-1 space-y-6">
         <div class="control-group">
           <h3 class="subsection-title">📁 Tải ảnh chữ ký</h3>
@@ -221,13 +221,30 @@
             </div>
 
             <div class="flex gap-3 pt-4">
-              <button id="processBtn" class="btn btn-primary" style="flex: 1;">🎯 Tách nền</button>
-              <button id="resetBtn" class="btn btn-secondary">🔄 Reset</button>
-              <button id="resetAllBtn" class="btn btn-secondary hidden">🔄 Reset tất cả</button>
+              <button id="processBtn" class="btn btn-primary hidden" style="flex: 1;">🎯 Tách nền</button>
+              <button id="resetBtn" class="btn btn-secondary">🔄 Làm mới</button>
+              <button id="resetAllBtn" class="btn btn-secondary hidden">🔄 Reset thay đổi</button>
             </div>
           </div>
         </div>
+      </div>
 
+      <div class="lg:col-span-3 grid md:grid-cols-2 gap-6">
+        <div class="canvas-container">
+          <div class="canvas-header">📷 Ảnh gốc</div>
+          <div class="canvas-body">
+            <canvas id="origCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
+          </div>
+        </div>
+        <div class="canvas-container">
+          <div class="canvas-header">✨ Kết quả (preview)</div>
+          <div class="canvas-body">
+            <canvas id="outCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-1 space-y-6">
         <div class="control-group">
           <h3 class="subsection-title">🎨 Chỉnh sửa vùng</h3>
           <div class="input-group">
@@ -264,7 +281,7 @@
                 </div>
                 <div class="flex gap-2 mt-3">
                   <button id="applyRegionBtn" class="btn btn-primary text-xs" style="flex: 1;">✅ Áp dụng</button>
-                  <button id="clearRegionBtn" class="btn btn-secondary text-xs" style="flex: 1;">❌ Xóa vùng</button>
+                  <button id="clearRegionBtn" class="btn btn-secondary text-xs hidden" style="flex: 1;">❌ Xóa vùng</button>
                 </div>
                 <div class="flex gap-2 mt-2">
                   <button id="resetRegionBtn" class="btn btn-secondary text-xs" style="flex: 1;">🔄 Reset vùng</button>
@@ -273,31 +290,15 @@
             </div>
             
             <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-              <button id="exportBtn" class="btn btn-primary" style="width: 100%;">⬇️ Xuất PNG nền trong</button>
-              <p class="tooltip">PNG sẽ được crop sát nét ký, nền trong suốt, màu theo chọn.</p>
+              <button id="exportBtn" class="btn btn-primary" style="width: 100%;">⬇️ Xuất PNG</button>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="lg:col-span-2 grid md:grid-cols-2 gap-6">
-        <div class="canvas-container">
-          <div class="canvas-header">📷 Ảnh gốc</div>
-          <div class="canvas-body">
-            <canvas id="origCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
-          </div>
-        </div>
-        <div class="canvas-container">
-          <div class="canvas-header">✨ Kết quả (preview)</div>
-          <div class="canvas-body">
-            <canvas id="outCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
           </div>
         </div>
       </div>
     </section>
   </main>
 
-  <footer class="max-w-7xl mx-auto px-6 py-8 text-center">
+  <footer class="max-w-full mx-auto px-8 py-8 text-center">
     <div style="border-top: 1px solid #e5e7eb; padding-top: 2rem;">
       <p class="text-sm text-gray-500">© 2025 Signature Studio.</p>
     </div>
