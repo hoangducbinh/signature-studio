@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signature Studio — Tách nền & tô màu chữ ký</title>
+  <meta name="description" content="Webapp client-side giúp tách nền chữ ký từ ảnh chụp, chỉnh độ đậm/nét, đổi màu và xuất PNG nền trong 1:1. Triển khai được trên GitHub Pages." />
+  <meta name="theme-color" content="#111827" />
+  <style>
+    :root{
+      --bg:#0b0f17; --fg:#e5e7eb; --muted:#9ca3af; --card:#0f172a; --accent:#22d3ee; --btn:#111827; --border:#1f2937; --good:#10b981; --warn:#f59e0b;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font:16px/1.5 ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color:var(--fg); background: radial-gradient(1200px 800px at 80% -10%, #1f2937 0%, transparent 60%), var(--bg);
+    }
+    .wrap{max-width:1100px; margin:24px auto; padding:0 16px}
+    header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px}
+    h1{font-size:22px; margin:0; letter-spacing:.4px}
+    .pill{padding:4px 10px; border:1px solid var(--border); border-radius:999px; color:var(--muted)}
+    .grid{display:grid; grid-template-columns: 1fr 1fr; gap:16px}
+    @media (max-width: 960px){ .grid{grid-template-columns: 1fr} }
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)); border:1px solid var(--border); border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35)}
+    .card h2{font-size:16px; margin:0 0 8px 0; color:#d1d5db}
+    .card .inner{padding:16px}
+
+    .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; min-height:180px; border:1px dashed #374151; border-radius:14px; padding:16px; background:#0b1220}
+    .drop.drag{border-color: var(--accent); box-shadow:0 0 0 2px rgba(34,211,238,.3) inset}
+
+    .controls{display:grid; gap:12px}
+    .row{display:grid; grid-template-columns: 130px 1fr; align-items:center; gap:12px}
+    .row label{color:var(--muted)}
+    input[type="range"]{width:100%}
+    input[type="number"], input[type="text"]{width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:#0b1220; color:var(--fg)}
+    input[type="color"]{width:40px; height:40px; border-radius:10px; border:1px solid var(--border); background:#0b1220}
+    .hint{color:var(--muted); font-size:12px}
+
+    .btns{display:flex; flex-wrap:wrap; gap:10px; margin-top:10px}
+    button{cursor:pointer; padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:var(--btn); color:var(--fg)}
+    button.primary{background:linear-gradient(90deg, #06b6d4, #3b82f6); border:0}
+    button.good{background:linear-gradient(90deg, #10b981, #22c55e); border:0}
+    button:disabled{opacity:.6; cursor:not-allowed}
+
+    .preview{display:grid; grid-template-rows:auto 1fr; gap:8px; min-height:420px}
+    .canvasWrap{background:#0b1220; border:1px solid var(--border); border-radius:14px; position:relative; overflow:hidden}
+    .cgrid{position:absolute; inset:0; background-size:16px 16px; background-image:linear-gradient(45deg,#111827 25%,transparent 25%),linear-gradient(-45deg,#111827 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#111827 75%),linear-gradient(-45deg,transparent 75%,#111827 75%); background-position:0 0,0 8px,8px -8px,-8px 0}
+    canvas{display:block; width:100%; height:100%}
+
+    footer{margin:20px 0 40px; color:var(--muted); font-size:12px}
+    .kbd{border:1px solid #374151; background:#0b1220; padding:1px 6px; border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>✍️ Signature Studio <span class="pill">Nền trong • Đổi màu • 1:1</span></h1>
+      <span class="pill">Client‑side • GitHub Pages‑ready</span>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="inner">
+          <h2>1) Tải ảnh chữ ký</h2>
+          <div id="drop" class="drop">
+            <div>Thả ảnh vào đây hoặc <label class="kbd" for="file">chọn file</label></div>
+            <div class="hint">Nên ký bút đen trên giấy trắng, chụp đủ sáng</div>
+            <input id="file" type="file" accept="image/*" hidden>
+          </div>
+        </div>
+        <div class="inner">
+          <h2>2) Điều chỉnh</h2>
+          <div class="controls">
+            <div class="row">
+              <label for="color">Màu chữ ký</label>
+              <div style="display:flex; gap:10px; align-items:center">
+                <input id="color" type="color" value="#000000" />
+                <input id="hex" type="text" value="#000000" maxlength="9" placeholder="#RRGGBB hoặc #RRGGBBAA" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="thick">Độ đậm/nét (px)</label>
+              <input id="thick" type="range" min="0" max="24" step="1" value="2">
+            </div>
+            <div class="row">
+              <label for="sens">Tách nền (độ nhạy)</label>
+              <input id="sens" type="range" min="0" max="100" step="1" value="35">
+            </div>
+            <div class="row">
+              <label for="gamma">Gamma (mượt mực)</label>
+              <input id="gamma" type="range" min="50" max="250" step="1" value="110">
+            </div>
+            <div class="row">
+              <label for="size">Kích thước xuất (px)</label>
+              <input id="size" type="number" min="256" max="4096" step="64" value="1024">
+            </div>
+            <div class="row">
+              <label for="margin">Lề (%)</label>
+              <input id="margin" type="range" min="0" max="20" step="1" value="6">
+            </div>
+            <div class="btns">
+              <button id="reset">Reset</button>
+              <button id="export" class="primary" disabled>Xuất PNG 1:1 nền trong</button>
+            </div>
+            <div class="hint">Tip: tăng “Tách nền” nếu giấy còn xám; giảm nếu nét bị mẻ. “Gamma” để mực mềm hơn/đậm hơn.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card preview">
+        <div class="inner"><h2>3) Xem trước</h2></div>
+        <div class="inner" style="padding-top:0">
+          <div class="canvasWrap" style="aspect-ratio:1/1">
+            <div class="cgrid"></div>
+            <canvas id="view" width="900" height="900" aria-label="Xem trước chữ ký 1:1"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      Làm việc 100% trên trình duyệt (không upload server). Mã nguồn 1 file duy nhất — thả vào GitHub Pages là chạy.
+    </footer>
+  </div>
+
+  <script>
+  (function(){
+    const els = {
+      file: document.getElementById('file'),
+      drop: document.getElementById('drop'),
+      view: document.getElementById('view'),
+      color: document.getElementById('color'),
+      hex: document.getElementById('hex'),
+      thick: document.getElementById('thick'),
+      sens: document.getElementById('sens'),
+      gamma: document.getElementById('gamma'),
+      size: document.getElementById('size'),
+      margin: document.getElementById('margin'),
+      reset: document.getElementById('reset'),
+      exportBtn: document.getElementById('export')
+    };
+
+    const state = {
+      img: null, // HTMLImageElement
+      srcCanvas: document.createElement('canvas'),
+      workCanvas: document.createElement('canvas'),
+      color: '#000000',
+      thickness: 2,
+      sensitivity: 35, // 0..100
+      gamma: 1.10, // 0.5..2.5
+      outSize: 1024,
+      marginPct: 6,
+    };
+
+    const clamp = (v,min,max)=> v<min?min: v>max?max:v;
+
+    // ---------- File load & dragdrop ----------
+    els.drop.addEventListener('click', () => els.file.click());
+    els.file.addEventListener('change', (e)=> handleFiles(e.target.files));
+    ;['dragenter','dragover'].forEach(ev => els.drop.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); els.drop.classList.add('drag'); }));
+    ;['dragleave','drop'].forEach(ev => els.drop.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); els.drop.classList.remove('drag'); }));
+    els.drop.addEventListener('drop', (e)=>{ const dt = e.dataTransfer; if(dt && dt.files && dt.files[0]) handleFiles(dt.files); });
+
+    function handleFiles(fileList){
+      const f = fileList[0];
+      if(!f) return;
+      const url = URL.createObjectURL(f);
+      const img = new Image();
+      img.onload = ()=>{ URL.revokeObjectURL(url); state.img = img; fitSrcToCanvas(img); els.exportBtn.disabled = false; render(); };
+      img.onerror = ()=> alert('Không đọc được ảnh. Hãy thử lại với định dạng PNG/JPG.');
+      img.src = url;
+    }
+
+    function fitSrcToCanvas(img){
+      // Giới hạn kích thước xử lý để không quá nặng
+      const MAX = 1800; // px dài nhất
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      state.srcCanvas.width = Math.max(1, Math.round(img.width * scale));
+      state.srcCanvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = state.srcCanvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.clearRect(0,0,state.srcCanvas.width,state.srcCanvas.height);
+      ctx.drawImage(img, 0,0, state.srcCanvas.width, state.srcCanvas.height);
+    }
+
+    // ---------- Controls ----------
+    els.color.addEventListener('input', ()=>{ els.hex.value = els.color.value; state.color = els.color.value; render(); });
+    els.hex.addEventListener('change', ()=>{
+      let v = els.hex.value.trim();
+      if(!v.startsWith('#')) v = '#' + v;
+      // Basic hex validation
+      if(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)){
+        els.color.value = v.substring(0,7);
+        state.color = v;
+        render();
+      } else {
+        alert('Mã màu không hợp lệ. Ví dụ: #000000, #1e3a8a');
+        els.hex.value = els.color.value;
+      }
+    });
+
+    els.thick.addEventListener('input', ()=>{ state.thickness = parseInt(els.thick.value,10)||0; render(); });
+    els.sens.addEventListener('input', ()=>{ state.sensitivity = parseInt(els.sens.value,10)||0; render(); });
+    els.gamma.addEventListener('input', ()=>{ state.gamma = parseInt(els.gamma.value,10)/100; render(); });
+    els.size.addEventListener('change', ()=>{ state.outSize = clamp(parseInt(els.size.value,10)||1024, 256, 4096); els.size.value = state.outSize; render(); });
+    els.margin.addEventListener('input', ()=>{ state.marginPct = parseInt(els.margin.value,10)||0; render(); });
+
+    els.reset.addEventListener('click', ()=>{
+      els.color.value = '#000000'; els.hex.value = '#000000'; state.color = '#000000';
+      els.thick.value = 2; state.thickness = 2;
+      els.sens.value = 35; state.sensitivity = 35;
+      els.gamma.value = 110; state.gamma = 1.10;
+      els.size.value = 1024; state.outSize = 1024;
+      els.margin.value = 6; state.marginPct = 6;
+      if(state.img) fitSrcToCanvas(state.img);
+      render();
+    });
+
+    els.exportBtn.addEventListener('click', ()=>{
+      if(!state.img){ alert('Chưa có ảnh chữ ký.'); return; }
+      const out = render(true); // render to exact size
+      const url = out.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url; a.download = `signature_${Date.now()}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+
+    // ---------- Core processing ----------
+    function render(forExport=false){
+      const view = els.view; const vctx = view.getContext('2d');
+      vctx.clearRect(0,0,view.width, view.height);
+      if(!state.img){
+        vctx.fillStyle = '#374151'; vctx.font = '14px ui-sans-serif'; vctx.fillText('Chưa có ảnh...', 16, 26);
+        return forExport ? view : undefined;
+      }
+
+      // 1) Lấy dữ liệu ảnh nguồn
+      const w = state.srcCanvas.width, h = state.srcCanvas.height;
+      const sctx = state.srcCanvas.getContext('2d');
+      const src = sctx.getImageData(0,0,w,h);
+
+      // 2) Tạo alpha từ độ đậm (ký mặc định mực đậm hơn nền)
+      const sd = src.data;
+      const alpha = new Uint8ClampedArray(w*h);
+      const sens = state.sensitivity/100; // 0..1
+      const clip = Math.min(0.95, sens*0.9); // white clip, tránh ăn mòn mực
+      const gam = clamp(state.gamma, 0.5, 2.5);
+      for(let i=0, j=0; i<sd.length; i+=4, j++){
+        // Luminance sRGB
+        const r=sd[i], g=sd[i+1], b=sd[i+2];
+        const L = 0.2126*r + 0.7152*g + 0.0722*b; // 0..255
+        let inv = 1 - (L/255); // mực đậm => inv cao
+        // level: cắt nền trắng theo clip
+        inv = Math.max(0, inv - clip) / (1 - clip + 1e-5);
+        // gamma
+        inv = Math.pow(inv, gam);
+        alpha[j] = Math.round(clamp(inv*255, 0, 255));
+      }
+
+      // 3) Dilation để tăng nét (độ dày)
+      const rad = Math.max(0, state.thickness|0);
+      let aProc = alpha;
+      if(rad>0){ aProc = dilate(alpha, w, h, rad); }
+
+      // 4) Cắt bbox để fit vào khung vuông
+      const bbox = getBBox(aProc, w, h, 8);
+      // nếu trắng tinh (không tìm thấy), giữ toàn khung
+      const bx = bbox ? bbox.x : 0; const by = bbox ? bbox.y : 0; const bw = bbox ? bbox.w : w; const bh = bbox ? bbox.h : h;
+
+      // 5) Vẽ ra canvas output (preview hoặc export)
+      const outSize = forExport ? state.outSize : 900; // view is square
+      const margin = clamp(state.marginPct,0,20)/100 * outSize;
+      const scale = Math.min((outSize - 2*margin)/bw, (outSize - 2*margin)/bh);
+
+      const out = forExport ? document.createElement('canvas') : view; out.width = outSize; out.height = outSize;
+      const octx = out.getContext('2d');
+      octx.clearRect(0,0,outSize,outSize);
+
+      // Tạo ImageData từ alpha + màu
+      const color = parseHex(state.color);
+      const sw = Math.max(1, Math.round(bw));
+      const sh = Math.max(1, Math.round(bh));
+      const imgData = octx.createImageData(Math.round(sw*scale), Math.round(sh*scale));
+      const dd = imgData.data;
+      // Resample aProc to target size (nearest for speed, mực sẽ vẫn ổn)
+      for(let y=0; y<imgData.height; y++){
+        const sy = by + Math.min(h-1, Math.round(y/scale));
+        for(let x=0; x<imgData.width; x++){
+          const sx = bx + Math.min(w-1, Math.round(x/scale));
+          const a = aProc[sy*w + sx];
+          const idx = (y*imgData.width + x)*4;
+          dd[idx] = color.r; dd[idx+1] = color.g; dd[idx+2] = color.b; dd[idx+3] = a; // màu nhân alpha (premultiplied visual)
+        }
+      }
+
+      const dx = Math.round((outSize - imgData.width)/2);
+      const dy = Math.round((outSize - imgData.height)/2);
+      octx.putImageData(imgData, dx, dy);
+
+      if(!forExport){ return out; }
+      else { return out; }
+    }
+
+    function parseHex(hex){
+      let v = hex.trim(); if(!v.startsWith('#')) v = '#' + v;
+      // expand #RGB
+      if(/^#([0-9a-fA-F]{3})$/.test(v)){
+        v = '#' + v.slice(1).split('').map(c=>c+c).join('');
+      }
+      // default black
+      let r=0,g=0,b=0,a=255;
+      if(/^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/.test(v)){
+        r = parseInt(v.slice(1,3),16);
+        g = parseInt(v.slice(3,5),16);
+        b = parseInt(v.slice(5,7),16);
+        if(v.length===9) a = parseInt(v.slice(7,9),16);
+      }
+      return {r,g,b,a};
+    }
+
+    function getBBox(alpha, w, h, threshold){
+      let minX=w, minY=h, maxX=-1, maxY=-1; const t = threshold|0;
+      for(let y=0; y<h; y++){
+        let rowOff = y*w;
+        for(let x=0; x<w; x++){
+          const a = alpha[rowOff + x];
+          if(a>t){ if(x<minX) minX=x; if(x>maxX) maxX=x; if(y<minY) minY=y; if(y>maxY) maxY=y; }
+        }
+      }
+      if(maxX<minX || maxY<minY) return null;
+      return {x:minX, y:minY, w:maxX-minX+1, h:maxY-minY+1};
+    }
+
+    // Naive but OK dilation: repeat 3x3 max for r times
+    function dilate(alpha, w, h, r){
+      let src = alpha; let dst = new Uint8ClampedArray(alpha.length);
+      const R = Math.min(24, Math.max(0, r|0));
+      for(let iter=0; iter<R; iter++){
+        for(let y=0; y<h; y++){
+          for(let x=0; x<w; x++){
+            let m=0;
+            for(let dy=-1; dy<=1; dy++){
+              const yy = y+dy; if(yy<0||yy>=h) continue; const off = yy*w;
+              for(let dx=-1; dx<=1; dx++){
+                const xx = x+dx; if(xx<0||xx>=w) continue;
+                const v = src[off+xx]; if(v>m) m=v;
+              }
+            }
+            dst[y*w + x] = m;
+          }
+        }
+        // swap
+        const tmp = src; src = dst; dst = tmp;
+      }
+      return src;
+    }
+
+    // Initialize empty preview grid
+    render();
+  })();
+  </script>
+</body>
+</html>
