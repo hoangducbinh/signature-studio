@@ -49,15 +49,21 @@
           </div>
 
           <div>
-            <label class="label">Độ dày nét</label>
-            <input id="stroke" type="range" min="-5" max="5" value="0" class="w-full" />
+            <div class="flex items-center justify-between">
+              <label class="label">Độ dày nét</label>
+              <input id="strokeNum" type="number" value="0" min="-5" max="5" step="0.5" class="w-16 px-2 py-1 text-xs border rounded-md" />
+            </div>
+            <input id="stroke" type="range" min="-5" max="5" value="0" step="0.5" class="w-full" />
             <div class="text-xs text-gray-500">Mỏng ⟵ <span id="strokeVal">0</span> ⟶ Đậm</div>
           </div>
 
           <div>
             <div class="flex items-center justify-between">
               <label class="label">Màu chữ ký</label>
-              <input id="color" type="color" value="#111111" class="w-10 h-8 border rounded-md p-0" />
+              <div class="flex items-center gap-2">
+                <input id="color" type="color" value="#0000FF" class="w-10 h-8 border rounded-md p-0" />
+                <input id="colorHex" type="text" value="#0000FF" placeholder="#000000" class="w-20 px-2 py-1 text-xs border rounded-md" maxlength="7" />
+              </div>
             </div>
           </div>
 
@@ -121,12 +127,14 @@
     const threshVal = document.getElementById('threshVal');
     const autoOtsu = document.getElementById('autoOtsu');
     const stroke = document.getElementById('stroke');
+    const strokeNum = document.getElementById('strokeNum');
     const strokeVal = document.getElementById('strokeVal');
     const color = document.getElementById('color');
+    const colorHex = document.getElementById('colorHex');
     const scale = document.getElementById('scale');
     const scaleVal = document.getElementById('scaleVal');
 
-    const INTERNAL_SCALE = 3; // xử lý hi‑res để mượt mép
+    const INTERNAL_SCALE = 4; // xử lý hi‑res để mượt mép
 
     let origImg = null;
     let mask = null; // Uint8ClampedArray alpha 0..255 ở work space
@@ -187,7 +195,7 @@
       return threshold;
     }
 
-    function makeSoftMask(gray, threshold, feather = 16) {
+    function makeSoftMask(gray, threshold, feather = 24) {
       const len = gray.length;
       const alpha = new Uint8ClampedArray(len);
       const tLo = threshold - feather;
@@ -197,7 +205,12 @@
         let a = 0;
         if (g <= tLo) a = 255;
         else if (g >= tHi) a = 0;
-        else a = Math.round(255 * (1 - (g - tLo) / (tHi - tLo)));
+        else {
+          // Sử dụng smoothstep để làm mượt hơn
+          const t = (g - tLo) / (tHi - tLo);
+          const smoothT = t * t * (3 - 2 * t); // smoothstep
+          a = Math.round(255 * (1 - smoothT));
+        }
         alpha[i] = a;
       }
       return alpha;
@@ -299,7 +312,8 @@
       const morphed = s > 0 ? dilateDisk(bin, w, h, r) : erodeDisk(bin, w, h, r);
       const out = new Uint8ClampedArray(alpha.length);
       for (let i = 0; i < morphed.length; i++) out[i] = morphed[i] ? 255 : 0;
-      return boxBlurAlpha(out, w, h, Math.max(1, Math.round(r * 1.2)));
+      // Tăng blur để làm mượt hơn
+      return boxBlurAlpha(out, w, h, Math.max(2, Math.round(r * 1.5)));
     }
 
     function hexToRgb(hex){
@@ -341,6 +355,17 @@
       octx.imageSmoothingQuality = 'high';
       octx.clearRect(0,0,outCanvas.width,outCanvas.height);
       octx.drawImage(stage, 0, 0, outCanvas.width, outCanvas.height);
+      
+      // Thêm một lần blur nhẹ cuối cùng để làm mượt hơn
+      const finalBlur = document.createElement('canvas');
+      finalBlur.width = outCanvas.width;
+      finalBlur.height = outCanvas.height;
+      const fctx = finalBlur.getContext('2d');
+      fctx.filter = 'blur(0.5px)';
+      fctx.drawImage(outCanvas, 0, 0);
+      
+      octx.clearRect(0,0,outCanvas.width,outCanvas.height);
+      octx.drawImage(finalBlur, 0, 0);
     }
 
     function process(){
@@ -353,8 +378,8 @@
       if(!autoOtsu.checked) t = clamp(parseInt(thresh.value), 0, 255);
       thresh.value = t; threshVal.textContent = String(t);
 
-      let alpha = makeSoftMask(gray, t, 16);
-      alpha = boxBlurAlpha(alpha, workW, workH, 1);
+      let alpha = makeSoftMask(gray, t, 24);
+      alpha = boxBlurAlpha(alpha, workW, workH, 2);
       const s = parseInt(stroke.value) * INTERNAL_SCALE;
       alpha = alphaDilateErode(alpha, workW, workH, s);
 
@@ -406,8 +431,9 @@
 
     function resetUI(){
       thresh.value = 128; threshVal.textContent = '128'; autoOtsu.checked = true;
-      stroke.value = 0; strokeVal.textContent = '0';
-      color.value = '#111111';
+      stroke.value = 0; strokeNum.value = 0; strokeVal.textContent = '0';
+      color.value = '#0000FF';
+      colorHex.value = '#0000FF';
       scale.value = 1; scaleVal.textContent = '1.00×';
       const ctxO = origCanvas.getContext('2d');
       ctxO.clearRect(0,0,origCanvas.width, origCanvas.height);
@@ -441,10 +467,58 @@
     thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
     thresh.addEventListener('change', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
 
-    stroke.addEventListener('input', ()=>{ strokeVal.textContent = stroke.value; });
+    stroke.addEventListener('input', ()=>{
+      strokeVal.textContent = stroke.value;
+      strokeNum.value = stroke.value;
+    });
     stroke.addEventListener('change', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
+    
+    strokeNum.addEventListener('input', ()=>{
+      const val = parseFloat(strokeNum.value);
+      if(!isNaN(val) && val >= -5 && val <= 5){
+        stroke.value = val;
+        strokeVal.textContent = val.toString();
+        if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); }
+      }
+    });
+    
+    strokeNum.addEventListener('change', ()=>{
+      const val = parseFloat(strokeNum.value);
+      if(!isNaN(val) && val >= -5 && val <= 5){
+        stroke.value = val;
+        strokeVal.textContent = val.toString();
+        if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); }
+      } else {
+        // Reset về giá trị của slider nếu nhập sai
+        strokeNum.value = stroke.value;
+      }
+    });
 
-    color.addEventListener('change', renderPreview);
+    color.addEventListener('change', ()=>{
+      colorHex.value = color.value;
+      renderPreview();
+    });
+    
+    colorHex.addEventListener('input', ()=>{
+      const hex = colorHex.value.trim();
+      if(/^#[0-9A-Fa-f]{6}$/.test(hex)){
+        color.value = hex;
+        renderPreview();
+      }
+    });
+    
+    colorHex.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        const hex = colorHex.value.trim();
+        if(/^#[0-9A-Fa-f]{6}$/.test(hex)){
+          color.value = hex;
+          renderPreview();
+        } else {
+          // Nếu không phải hex hợp lệ, reset về giá trị của color picker
+          colorHex.value = color.value;
+        }
+      }
+    });
 
     scale.addEventListener('input', ()=>{ scaleVal.textContent = parseFloat(scale.value).toFixed(2)+'×'; });
   </script>
