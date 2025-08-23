@@ -3,10 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Signature Studio — Tách nền & chỉnh màu nét ký</title>
+  <title>Signature Studio — Tách nền & chỉnh màu nét ký (Supersampled AA)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Canvas checkerboard background for transparency preview */
     .checker {
       background-image: linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
                         linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
@@ -25,11 +24,10 @@
 <body class="bg-white text-gray-900">
   <header class="max-w-6xl mx-auto px-4 py-6">
     <h1 class="text-2xl md:text-3xl font-bold">✍️ Signature Studio</h1>
-    <p class="text-gray-600 mt-1">Tách nền chữ ký từ ảnh chụp, chỉnh nét, đổi màu, scale và xuất PNG nền trong — chạy 100% trên trình duyệt.</p>
+    <p class="text-gray-600 mt-1">Tách nền chữ ký từ ảnh chụp, chỉnh nét (anti‑alias + supersample), đổi màu, scale và xuất PNG nền trong — chạy 100% trên trình duyệt.</p>
   </header>
 
   <main class="max-w-6xl mx-auto px-4 pb-24">
-    <!-- Upload & Actions -->
     <section class="grid lg:grid-cols-3 gap-6 items-start">
       <div class="lg:col-span-1 space-y-4">
         <div class="p-4 border rounded-2xl">
@@ -101,8 +99,7 @@
       <details>
         <summary class="cursor-pointer select-none font-medium text-gray-700">Cách hoạt động (kỹ thuật)</summary>
         <div class="mt-2 space-y-2">
-          <p>App chạy 100% client-side. Ảnh được chuyển sang grayscale, tìm ngưỡng tự động bằng Otsu (có thể chỉnh tay). Sau đó tạo mask nét ký, áp dụng co/giãn (erosion/dilation) để mỏng/đậm nét, đổi màu theo lựa chọn, scale lại và xuất PNG nền trong.</p>
-          <p>Lưu ý: Ảnh chụp bóng/nhăn giấy có thể cần tăng/giảm threshold một chút để loại bỏ nhiễu.</p>
+          <p>Pipeline: supersample ×3 ở hậu trường → soft‑mask (alpha) thay vì nhị phân → co/giãn bằng nhân đĩa → blur nhẹ → downsample khi preview/xuất để triệt răng cưa.</p>
         </div>
       </details>
     </section>
@@ -129,13 +126,16 @@
     const scale = document.getElementById('scale');
     const scaleVal = document.getElementById('scaleVal');
 
-    let origImg = null; // Image object
-    let mask = null;    // Uint8Array (0/1) for foreground
+    const INTERNAL_SCALE = 3; // xử lý hi‑res để mượt mép
+
+    let origImg = null;
+    let mask = null; // Uint8ClampedArray alpha 0..255 ở work space
     let workW = 0, workH = 0;
+    const workCanvas = document.createElement('canvas');
 
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
-    function drawImageToCanvas(img, canvas, maxDim=1600){
+    function drawImageToCanvas(img, canvas, maxDim=2800){
       const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
       const w = Math.round(img.width * ratio);
       const h = Math.round(img.height * ratio);
@@ -148,15 +148,15 @@
       return {w, h};
     }
 
-    function getImageData(canvas){
-      const ctx = canvas.getContext('2d');
-      return ctx.getImageData(0,0,canvas.width, canvas.height);
-    }
-
-    function putImageData(canvas, imgData){
-      const ctx = canvas.getContext('2d');
-      canvas.width = imgData.width; canvas.height = imgData.height;
-      ctx.putImageData(imgData, 0, 0);
+    function prepareWorkCanvas(displayW, displayH){
+      workW = displayW * INTERNAL_SCALE;
+      workH = displayH * INTERNAL_SCALE;
+      workCanvas.width = workW;
+      workCanvas.height = workH;
+      const wctx = workCanvas.getContext('2d');
+      wctx.imageSmoothingEnabled = true;
+      wctx.imageSmoothingQuality = 'high';
+      wctx.drawImage(origCanvas, 0, 0, workW, workH);
     }
 
     function toGray(data){
@@ -164,14 +164,12 @@
       const gray = new Uint8ClampedArray(len);
       for(let i=0, j=0; i<data.length; i+=4, j++){
         const r=data[i], g=data[i+1], b=data[i+2];
-        // Perceptual luma
         gray[j] = (0.2126*r + 0.7152*g + 0.0722*b) | 0;
       }
       return gray;
     }
 
     function otsuThreshold(gray){
-      // histogram
       const hist = new Uint32Array(256);
       for(let i=0;i<gray.length;i++) hist[gray[i]]++;
       const total = gray.length;
@@ -189,28 +187,79 @@
       return threshold;
     }
 
-    function makeMask(gray, threshold){
-      const m = new Uint8Array(gray.length);
-      for(let i=0;i<gray.length;i++){
-        // Assume foreground is darker than paper
-        m[i] = gray[i] < threshold ? 1 : 0;
+    function makeSoftMask(gray, threshold, feather = 16) {
+      const len = gray.length;
+      const alpha = new Uint8ClampedArray(len);
+      const tLo = threshold - feather;
+      const tHi = threshold + feather;
+      for (let i = 0; i < len; i++) {
+        const g = gray[i];
+        let a = 0;
+        if (g <= tLo) a = 255;
+        else if (g >= tHi) a = 0;
+        else a = Math.round(255 * (1 - (g - tLo) / (tHi - tLo)));
+        alpha[i] = a;
       }
-      return m;
+      return alpha;
     }
 
-    function dilate(m, w, h, r){
-      if(r<=0) return m;
-      const out = new Uint8Array(m.length);
-      const rr = r|0;
+    function boxBlurAlpha(alpha, w, h, r = 1) {
+      if (r <= 0) return alpha;
+      const out = new Uint8ClampedArray(alpha.length);
+      const tmp = new Uint8ClampedArray(alpha.length);
+      for (let y = 0; y < h; y++) {
+        let acc = 0, count = 0;
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          const x0 = Math.max(0, x - r);
+          const x1 = Math.min(w - 1, x + r);
+          if (x === 0) {
+            acc = 0; count = 0;
+            for (let k = x0; k <= x1; k++) { acc += alpha[row + k]; count++; }
+          } else {
+            const prevOut = x - r - 1;
+            const nextIn  = x + r;
+            if (prevOut >= 0) { acc -= alpha[row + prevOut]; count--; }
+            if (nextIn < w)  { acc += alpha[row + nextIn];  count++; }
+          }
+          tmp[row + x] = Math.round(acc / count);
+        }
+      }
+      for (let x = 0; x < w; x++) {
+        let acc = 0, count = 0;
+        for (let y = 0; y < h; y++) {
+          const y0 = Math.max(0, y - r);
+          const y1 = Math.min(h - 1, y + r);
+          if (y === 0) {
+            acc = 0; count = 0;
+            for (let k = y0; k <= y1; k++) { acc += tmp[k * w + x]; count++; }
+          } else {
+            const prevOut = y - r - 1;
+            const nextIn  = y + r;
+            if (prevOut >= 0) { acc -= tmp[prevOut * w + x]; count--; }
+            if (nextIn < h)  { acc += tmp[nextIn * w + x];  count++; }
+          }
+          out[y * w + x] = Math.round(acc / count);
+        }
+      }
+      return out;
+    }
+
+    function dilateDisk(bin, w, h, r){
+      if(r<=0) return bin;
+      const out = new Uint8Array(bin.length);
+      const r2 = r*r;
       for(let y=0;y<h;y++){
         for(let x=0;x<w;x++){
           let val = 0;
-          for(let dy=-rr; dy<=rr && !val; dy++){
+          for(let dy=-r; dy<=r && !val; dy++){
             const yy = y+dy; if(yy<0||yy>=h) continue;
-            for(let dx=-rr; dx<=rr; dx++){
+            const dy2 = dy*dy;
+            for(let dx=-r; dx<=r; dx++){
               const xx = x+dx; if(xx<0||xx>=w) continue;
+              if(dy2 + dx*dx > r2) continue;
               const idx = yy*w+xx;
-              if(m[idx]){ val=1; break; }
+              if(bin[idx]){ val=1; break; }
             }
           }
           out[y*w+x] = val;
@@ -219,19 +268,21 @@
       return out;
     }
 
-    function erode(m, w, h, r){
-      if(r<=0) return m;
-      const out = new Uint8Array(m.length);
-      const rr = r|0;
+    function erodeDisk(bin, w, h, r){
+      if(r<=0) return bin;
+      const out = new Uint8Array(bin.length);
+      const r2 = r*r;
       for(let y=0;y<h;y++){
         for(let x=0;x<w;x++){
           let val = 1;
-          for(let dy=-rr; dy<=rr && val; dy++){
+          for(let dy=-r; dy<=r && val; dy++){
             const yy = y+dy; if(yy<0||yy>=h) { val=0; break; }
-            for(let dx=-rr; dx<=rr; dx++){
+            const dy2 = dy*dy;
+            for(let dx=-r; dx<=r; dx++){
               const xx = x+dx; if(xx<0||xx>=w){ val=0; break; }
+              if(dy2 + dx*dx > r2) continue;
               const idx = yy*w+xx;
-              if(!m[idx]){ val=0; break; }
+              if(!bin[idx]){ val=0; break; }
             }
           }
           out[y*w+x] = val;
@@ -240,23 +291,15 @@
       return out;
     }
 
-    function applyStrokeAdjust(m, w, h, s){
-      if(s===0) return m;
-      if(s>0) return dilate(m, w, h, s);
-      return erode(m, w, h, -s);
-    }
-
-    function maskToImageData(m, w, h, hexColor){
-      const img = new ImageData(w, h);
-      const {r,g,b} = hexToRgb(hexColor);
-      for(let i=0, j=0; i<img.data.length; i+=4, j++){
-        if(m[j]){
-          img.data[i] = r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=255; // opaque stroke
-        } else {
-          img.data[i] = 0; img.data[i+1]=0; img.data[i+2]=0; img.data[i+3]=0;   // transparent
-        }
-      }
-      return img;
+    function alphaDilateErode(alpha, w, h, s) {
+      if (s === 0) return alpha;
+      const bin = new Uint8Array(alpha.length);
+      for (let i = 0; i < alpha.length; i++) bin[i] = alpha[i] > 0 ? 1 : 0;
+      const r = Math.abs(s);
+      const morphed = s > 0 ? dilateDisk(bin, w, h, r) : erodeDisk(bin, w, h, r);
+      const out = new Uint8ClampedArray(alpha.length);
+      for (let i = 0; i < morphed.length; i++) out[i] = morphed[i] ? 255 : 0;
+      return boxBlurAlpha(out, w, h, Math.max(1, Math.round(r * 1.2)));
     }
 
     function hexToRgb(hex){
@@ -268,7 +311,9 @@
       let minX=w, minY=h, maxX=-1, maxY=-1;
       for(let y=0;y<h;y++){
         for(let x=0;x<w;x++){
-          if(m[y*w+x]){ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+          if(m[y*w+x] > 0){
+            if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+          }
         }
       }
       if(maxX<minX || maxY<minY) return {x:0,y:0,w:0,h:0};
@@ -278,70 +323,79 @@
     function renderPreview(){
       if(!origImg || !mask) return;
       const {r,g,b} = hexToRgb(color.value);
-      const w = workW, h = workH;
-      const img = new ImageData(w, h);
+
+      const img = new ImageData(workW, workH);
       for(let i=0, j=0; i<img.data.length; i+=4, j++){
-        if(mask[j]){ img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=255; }
-        else { img.data[i]=0; img.data[i+1]=0; img.data[i+2]=0; img.data[i+3]=0; }
+        const a = mask[j];
+        img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=a;
       }
-      putImageData(outCanvas, img);
+
+      const stage = document.createElement('canvas');
+      stage.width = workW; stage.height = workH;
+      stage.getContext('2d').putImageData(img, 0, 0);
+
+      const octx = outCanvas.getContext('2d');
+      outCanvas.width = Math.round(workW / INTERNAL_SCALE);
+      outCanvas.height = Math.round(workH / INTERNAL_SCALE);
+      octx.imageSmoothingEnabled = true;
+      octx.imageSmoothingQuality = 'high';
+      octx.clearRect(0,0,outCanvas.width,outCanvas.height);
+      octx.drawImage(stage, 0, 0, outCanvas.width, outCanvas.height);
     }
 
     function process(){
       if(!origImg){ alert('Hãy tải ảnh chữ ký trước đã nhé!'); return; }
-      const ctx = origCanvas.getContext('2d');
-      const imgData = ctx.getImageData(0,0,origCanvas.width, origCanvas.height);
+      const wctx = workCanvas.getContext('2d');
+      const imgData = wctx.getImageData(0,0,workW, workH);
       const gray = toGray(imgData.data);
+
       let t = autoOtsu.checked ? otsuThreshold(gray) : parseInt(thresh.value);
       if(!autoOtsu.checked) t = clamp(parseInt(thresh.value), 0, 255);
       thresh.value = t; threshVal.textContent = String(t);
-      let m = makeMask(gray, t);
-      const s = parseInt(stroke.value);
-      m = applyStrokeAdjust(m, origCanvas.width, origCanvas.height, s);
-      mask = m; workW = origCanvas.width; workH = origCanvas.height;
+
+      let alpha = makeSoftMask(gray, t, 16);
+      alpha = boxBlurAlpha(alpha, workW, workH, 1);
+      const s = parseInt(stroke.value) * INTERNAL_SCALE;
+      alpha = alphaDilateErode(alpha, workW, workH, s);
+
+      mask = alpha;
       renderPreview();
     }
 
     function exportPng(){
       if(!mask){ alert('Chưa có kết quả để xuất. Nhấn "Tách nền" trước nhé!'); return; }
-      const w = workW, h = workH;
-      const bbox = findBoundingBox(mask, w, h);
+      const bbox = findBoundingBox(mask, workW, workH);
       if(bbox.w===0 || bbox.h===0){ alert('Không phát hiện được nét ký. Hãy giảm threshold hoặc tăng độ dày nét.'); return; }
 
       const scaleFactor = parseFloat(scale.value);
-      const tmp = document.createElement('canvas');
-      tmp.width = Math.max(1, Math.round(bbox.w * scaleFactor));
-      tmp.height = Math.max(1, Math.round(bbox.h * scaleFactor));
-      const tctx = tmp.getContext('2d');
-      tctx.imageSmoothingEnabled = true;
-      tctx.imageSmoothingQuality = 'high';
 
-      // Create colored ImageData cropped to bbox
       const cropped = new ImageData(bbox.w, bbox.h);
       const {r,g,b} = hexToRgb(color.value);
       for(let y=0; y<bbox.h; y++){
         for(let x=0; x<bbox.w; x++){
-          const srcIdx = (bbox.y + y) * w + (bbox.x + x);
+          const srcIdx = (bbox.y + y) * workW + (bbox.x + x);
           const dstIdx = (y * bbox.w + x) * 4;
-          if(mask[srcIdx]){
-            cropped.data[dstIdx] = r;
-            cropped.data[dstIdx+1] = g;
-            cropped.data[dstIdx+2] = b;
-            cropped.data[dstIdx+3] = 255;
-          } else {
-            cropped.data[dstIdx] = 0;
-            cropped.data[dstIdx+1] = 0;
-            cropped.data[dstIdx+2] = 0;
-            cropped.data[dstIdx+3] = 0;
-          }
+          const a = mask[srcIdx];
+          cropped.data[dstIdx] = r;
+          cropped.data[dstIdx+1] = g;
+          cropped.data[dstIdx+2] = b;
+          cropped.data[dstIdx+3] = a;
         }
       }
 
-      // Draw cropped then scale
       const stage = document.createElement('canvas');
       stage.width = bbox.w; stage.height = bbox.h;
       stage.getContext('2d').putImageData(cropped, 0, 0);
-      tctx.drawImage(stage, 0, 0, tmp.width, tmp.height);
+
+      const outW = Math.max(1, Math.round((bbox.w / INTERNAL_SCALE) * scaleFactor));
+      const outH = Math.max(1, Math.round((bbox.h / INTERNAL_SCALE) * scaleFactor));
+
+      const tmp = document.createElement('canvas');
+      tmp.width = outW; tmp.height = outH;
+      const tctx = tmp.getContext('2d');
+      tctx.imageSmoothingEnabled = true;
+      tctx.imageSmoothingQuality = 'high';
+      tctx.drawImage(stage, 0, 0, outW, outH);
 
       const url = tmp.toDataURL('image/png');
       const a = document.createElement('a');
@@ -362,15 +416,15 @@
       origImg = null; mask = null; workW = 0; workH = 0;
     }
 
-    // Events
     fileInput.addEventListener('change', (e)=>{
       const file = e.target.files && e.target.files[0];
       if(!file) return;
       const img = new Image();
       img.onload = ()=>{
-        drawImageToCanvas(img, origCanvas);
-        origImg = img; mask = null; workW = origCanvas.width; workH = origCanvas.height;
-        // Auto process on load for quick preview
+        const {w, h} = drawImageToCanvas(img, origCanvas);
+        origImg = img;
+        prepareWorkCanvas(w, h);
+        mask = null;
         process();
       };
       img.onerror = ()=> alert('Không mở được ảnh. Hãy thử lại với file .jpg/.png/.webp');
@@ -379,16 +433,16 @@
       reader.readAsDataURL(file);
     });
 
-    processBtn.addEventListener('click', process);
+    processBtn.addEventListener('click', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
     exportBtn.addEventListener('click', exportPng);
     resetBtn.addEventListener('click', resetUI);
 
-    autoOtsu.addEventListener('change', ()=>{ thresh.disabled = autoOtsu.checked; process(); });
+    autoOtsu.addEventListener('change', ()=>{ thresh.disabled = autoOtsu.checked; if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
     thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
-    thresh.addEventListener('change', process);
+    thresh.addEventListener('change', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
 
     stroke.addEventListener('input', ()=>{ strokeVal.textContent = stroke.value; });
-    stroke.addEventListener('change', process);
+    stroke.addEventListener('change', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
 
     color.addEventListener('change', renderPreview);
 
