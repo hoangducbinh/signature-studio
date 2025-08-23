@@ -79,9 +79,46 @@
           </div>
         </div>
 
-        <div class="p-4 border rounded-2xl space-y-2">
-          <button id="exportBtn" class="btn btn-primary w-full">⬇️ Xuất PNG nền trong</button>
-          <p class="text-xs text-gray-500">PNG sẽ được crop sát nét ký, nền trong suốt, màu theo chọn.</p>
+        <div class="p-4 border rounded-2xl space-y-4">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="label">Chọn vùng chỉnh sửa</label>
+              <button id="selectModeBtn" class="btn btn-ghost text-xs">🖱️ Chọn vùng</button>
+            </div>
+            <div id="selectionTools" class="space-y-2 hidden">
+              <div class="flex gap-2">
+                <button id="rectSelectBtn" class="btn btn-ghost text-xs flex-1">📐 Hình chữ nhật</button>
+                <button id="brushSelectBtn" class="btn btn-ghost text-xs flex-1">🖌️ Cọ vẽ</button>
+              </div>
+              <div class="flex gap-2">
+                <input id="brushSize" type="range" min="5" max="50" value="15" class="flex-1" />
+                <span class="text-xs text-gray-500 w-8 text-center"><span id="brushSizeVal">15</span>px</span>
+              </div>
+            </div>
+          </div>
+          
+          <div id="regionControls" class="space-y-2 hidden">
+            <div class="flex items-center justify-between">
+              <label class="label">Màu vùng chọn</label>
+              <div class="flex items-center gap-2">
+                <input id="regionColor" type="color" value="#0000FF" class="w-8 h-6 border rounded-md p-0" />
+                <input id="regionColorHex" type="text" value="#0000FF" placeholder="#000000" class="w-16 px-1 py-1 text-xs border rounded-md" maxlength="7" />
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <label class="label">Độ dày vùng chọn</label>
+              <input id="regionStroke" type="number" value="0" min="-3" max="3" step="0.5" class="w-16 px-2 py-1 text-xs border rounded-md" />
+            </div>
+            <div class="flex gap-2">
+              <button id="applyRegionBtn" class="btn btn-primary text-xs flex-1">✅ Áp dụng</button>
+              <button id="clearRegionBtn" class="btn btn-ghost text-xs flex-1">❌ Xóa vùng</button>
+            </div>
+          </div>
+          
+          <div class="pt-2 border-t">
+            <button id="exportBtn" class="btn btn-primary w-full">⬇️ Xuất PNG nền trong</button>
+            <p class="text-xs text-gray-500">PNG sẽ được crop sát nét ký, nền trong suốt, màu theo chọn.</p>
+          </div>
         </div>
       </div>
 
@@ -134,12 +171,35 @@
     const scale = document.getElementById('scale');
     const scaleVal = document.getElementById('scaleVal');
 
+    // Selection tools
+    const selectModeBtn = document.getElementById('selectModeBtn');
+    const selectionTools = document.getElementById('selectionTools');
+    const rectSelectBtn = document.getElementById('rectSelectBtn');
+    const brushSelectBtn = document.getElementById('brushSelectBtn');
+    const brushSize = document.getElementById('brushSize');
+    const brushSizeVal = document.getElementById('brushSizeVal');
+    const regionControls = document.getElementById('regionControls');
+    const regionColor = document.getElementById('regionColor');
+    const regionColorHex = document.getElementById('regionColorHex');
+    const regionStroke = document.getElementById('regionStroke');
+    const applyRegionBtn = document.getElementById('applyRegionBtn');
+    const clearRegionBtn = document.getElementById('clearRegionBtn');
+
     const INTERNAL_SCALE = 4; // xử lý hi‑res để mượt mép
 
     let origImg = null;
     let mask = null; // Uint8ClampedArray alpha 0..255 ở work space
+    let colorMap = null; // Uint8ClampedArray RGBA cho từng pixel
     let workW = 0, workH = 0;
     const workCanvas = document.createElement('canvas');
+    
+    // Selection state
+    let isSelectMode = false;
+    let selectionMode = 'rect'; // 'rect' or 'brush'
+    let selectedRegion = null; // {x, y, w, h} for rect or points[] for brush
+    let isDrawing = false;
+    let selectionCanvas = document.createElement('canvas');
+    let selectionCtx = selectionCanvas.getContext('2d');
 
     function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
@@ -336,12 +396,29 @@
 
     function renderPreview(){
       if(!origImg || !mask) return;
-      const {r,g,b} = hexToRgb(color.value);
-
+      
       const img = new ImageData(workW, workH);
-      for(let i=0, j=0; i<img.data.length; i+=4, j++){
-        const a = mask[j];
-        img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=a;
+      
+      if(colorMap) {
+        // Use colorMap if available (for region-specific colors)
+        for(let i=0, j=0; i<img.data.length; i+=4, j++){
+          const a = mask[j];
+          if(a > 0) {
+            img.data[i] = colorMap[i];     // R
+            img.data[i+1] = colorMap[i+1]; // G
+            img.data[i+2] = colorMap[i+2]; // B
+            img.data[i+3] = a;             // A
+          } else {
+            img.data[i] = 0; img.data[i+1] = 0; img.data[i+2] = 0; img.data[i+3] = 0;
+          }
+        }
+      } else {
+        // Use global color
+        const {r,g,b} = hexToRgb(color.value);
+        for(let i=0, j=0; i<img.data.length; i+=4, j++){
+          const a = mask[j];
+          img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=a;
+        }
       }
 
       const stage = document.createElement('canvas');
@@ -366,6 +443,11 @@
       
       octx.clearRect(0,0,outCanvas.width,outCanvas.height);
       octx.drawImage(finalBlur, 0, 0);
+      
+      // Draw selection overlay if in select mode
+      if(isSelectMode && selectedRegion) {
+        drawSelectionOverlay();
+      }
     }
 
     function process(){
@@ -384,6 +466,19 @@
       alpha = alphaDilateErode(alpha, workW, workH, s);
 
       mask = alpha;
+      
+      // Initialize colorMap with global color
+      const {r,g,b} = hexToRgb(color.value);
+      colorMap = new Uint8ClampedArray(workW * workH * 4);
+      for(let i=0, j=0; i<colorMap.length; i+=4, j++){
+        if(alpha[j] > 0) {
+          colorMap[i] = r;
+          colorMap[i+1] = g;
+          colorMap[i+2] = b;
+          colorMap[i+3] = 255;
+        }
+      }
+      
       renderPreview();
     }
 
@@ -439,7 +534,263 @@
       ctxO.clearRect(0,0,origCanvas.width, origCanvas.height);
       const ctxOut = outCanvas.getContext('2d');
       ctxOut.clearRect(0,0,outCanvas.width, outCanvas.height);
-      origImg = null; mask = null; workW = 0; workH = 0;
+      origImg = null; mask = null; colorMap = null; workW = 0; workH = 0;
+      
+      // Reset selection
+      isSelectMode = false;
+      selectedRegion = null;
+      selectionTools.classList.add('hidden');
+      regionControls.classList.add('hidden');
+      selectModeBtn.textContent = '🖱️ Chọn vùng';
+    }
+
+    // Selection functions
+    function toggleSelectMode() {
+      isSelectMode = !isSelectMode;
+      console.log('Toggle select mode:', isSelectMode);
+      if(isSelectMode) {
+        selectModeBtn.textContent = '❌ Thoát chọn';
+        selectionTools.classList.remove('hidden');
+        setupSelectionCanvas();
+        // Set default selection mode
+        selectionMode = 'rect';
+        rectSelectBtn.classList.add('bg-gray-200');
+        brushSelectBtn.classList.remove('bg-gray-200');
+      } else {
+        selectModeBtn.textContent = '🖱️ Chọn vùng';
+        selectionTools.classList.add('hidden');
+        regionControls.classList.add('hidden');
+        selectedRegion = null;
+        isDrawing = false;
+        renderPreview();
+      }
+    }
+
+    function setupSelectionCanvas() {
+      selectionCanvas.width = outCanvas.width;
+      selectionCanvas.height = outCanvas.height;
+      selectionCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+    }
+
+    function drawSelectionOverlay() {
+      if(!selectedRegion) return;
+      
+      const ctx = outCanvas.getContext('2d');
+      ctx.save();
+      
+      if(selectionMode === 'rect') {
+        // Draw rectangle selection
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
+        
+        // Fill with semi-transparent red
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+        ctx.fillRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
+      } else if(selectionMode === 'brush') {
+        // Draw brush selection
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        if(selectedRegion.points && selectedRegion.points.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(selectedRegion.points[0].x, selectedRegion.points[0].y);
+          for(let i = 1; i < selectedRegion.points.length; i++) {
+            ctx.lineTo(selectedRegion.points[i].x, selectedRegion.points[i].y);
+          }
+          ctx.stroke();
+        }
+      }
+      
+      ctx.restore();
+    }
+
+    function getCanvasCoords(e) {
+      const rect = outCanvas.getBoundingClientRect();
+      const scaleX = outCanvas.width / rect.width;
+      const scaleY = outCanvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    function startRectSelection(e) {
+      const coords = getCanvasCoords(e);
+      console.log('Start rect selection at:', coords);
+      selectedRegion = {
+        x: coords.x,
+        y: coords.y,
+        w: 0,
+        h: 0
+      };
+      isDrawing = true;
+    }
+
+    function updateRectSelection(e) {
+      if(!isDrawing || !selectedRegion) return;
+      const coords = getCanvasCoords(e);
+      selectedRegion.w = coords.x - selectedRegion.x;
+      selectedRegion.h = coords.y - selectedRegion.y;
+      renderPreview();
+    }
+
+    function endRectSelection() {
+      if(!isDrawing || !selectedRegion) return;
+      isDrawing = false;
+      console.log('End rect selection:', selectedRegion);
+      
+      // Normalize rectangle (handle negative width/height)
+      if(selectedRegion.w < 0) {
+        selectedRegion.x += selectedRegion.w;
+        selectedRegion.w = Math.abs(selectedRegion.w);
+      }
+      if(selectedRegion.h < 0) {
+        selectedRegion.y += selectedRegion.h;
+        selectedRegion.h = Math.abs(selectedRegion.h);
+      }
+      
+      if(selectedRegion.w > 5 && selectedRegion.h > 5) {
+        regionControls.classList.remove('hidden');
+        console.log('Region selected, showing controls');
+        renderPreview();
+      } else {
+        selectedRegion = null;
+        console.log('Region too small, cancelled');
+      }
+    }
+
+    function startBrushSelection(e) {
+      const coords = getCanvasCoords(e);
+      selectedRegion = {
+        points: [coords],
+        brushSize: parseInt(brushSize.value)
+      };
+      isDrawing = true;
+    }
+
+    function updateBrushSelection(e) {
+      if(!isDrawing || !selectedRegion) return;
+      const coords = getCanvasCoords(e);
+      selectedRegion.points.push(coords);
+      renderPreview();
+    }
+
+    function endBrushSelection() {
+      if(!isDrawing || !selectedRegion) return;
+      isDrawing = false;
+      
+      if(selectedRegion.points.length > 2) {
+        regionControls.classList.remove('hidden');
+        renderPreview();
+      } else {
+        selectedRegion = null;
+      }
+    }
+
+    function applyRegionChanges() {
+      if(!selectedRegion || !mask || !colorMap) {
+        console.log('Cannot apply changes:', {selectedRegion: !!selectedRegion, mask: !!mask, colorMap: !!colorMap});
+        return;
+      }
+      
+      console.log('Applying region changes:', {
+        region: selectedRegion,
+        color: regionColor.value,
+        stroke: regionStroke.value,
+        mode: selectionMode
+      });
+      
+      const {r, g, b} = hexToRgb(regionColor.value);
+      const strokeChange = parseFloat(regionStroke.value);
+      
+      // Convert selection coordinates to work space
+      const scale = INTERNAL_SCALE;
+      const workRegion = {
+        x: Math.round(selectedRegion.x * scale),
+        y: Math.round(selectedRegion.y * scale),
+        w: Math.round(selectedRegion.w * scale),
+        h: Math.round(selectedRegion.h * scale)
+      };
+      
+      console.log('Work region:', workRegion);
+      
+      if(selectionMode === 'rect') {
+        // Apply changes to rectangular region
+        let changedPixels = 0;
+        for(let y = workRegion.y; y < workRegion.y + workRegion.h; y++) {
+          for(let x = workRegion.x; x < workRegion.x + workRegion.w; x++) {
+            if(x >= 0 && x < workW && y >= 0 && y < workH) {
+              const idx = y * workW + x;
+              const colorIdx = idx * 4;
+              if(mask[idx] > 0) {
+                // Apply color change
+                colorMap[colorIdx] = r;
+                colorMap[colorIdx + 1] = g;
+                colorMap[colorIdx + 2] = b;
+                
+                // Apply stroke change
+                if(strokeChange !== 0) {
+                  const newAlpha = Math.max(0, Math.min(255, mask[idx] + strokeChange * 50));
+                  mask[idx] = newAlpha;
+                }
+                changedPixels++;
+              }
+            }
+          }
+        }
+        console.log('Changed pixels in rect:', changedPixels);
+      } else if(selectionMode === 'brush') {
+        // Apply changes to brush selection
+        const brushRadius = selectedRegion.brushSize * scale / 2;
+        let changedPixels = 0;
+        for(let i = 0; i < selectedRegion.points.length; i++) {
+          const point = selectedRegion.points[i];
+          const workX = Math.round(point.x * scale);
+          const workY = Math.round(point.y * scale);
+          
+          for(let dy = -brushRadius; dy <= brushRadius; dy++) {
+            for(let dx = -brushRadius; dx <= brushRadius; dx++) {
+              const x = workX + dx;
+              const y = workY + dy;
+              if(x >= 0 && x < workW && y >= 0 && y < workH) {
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist <= brushRadius) {
+                  const idx = y * workW + x;
+                  const colorIdx = idx * 4;
+                  if(mask[idx] > 0) {
+                    // Apply color change
+                    colorMap[colorIdx] = r;
+                    colorMap[colorIdx + 1] = g;
+                    colorMap[colorIdx + 2] = b;
+                    
+                    // Apply stroke change
+                    if(strokeChange !== 0) {
+                      const newAlpha = Math.max(0, Math.min(255, mask[idx] + strokeChange * 50));
+                      mask[idx] = newAlpha;
+                    }
+                    changedPixels++;
+                  }
+                }
+              }
+            }
+          }
+        }
+        console.log('Changed pixels in brush:', changedPixels);
+      }
+      
+      // Re-render with new mask and colors
+      console.log('Re-rendering with changes');
+      renderPreview();
+    }
+
+    function clearRegion() {
+      selectedRegion = null;
+      regionControls.classList.add('hidden');
+      renderPreview();
     }
 
     fileInput.addEventListener('change', (e)=>{
@@ -462,6 +813,23 @@
     processBtn.addEventListener('click', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
     exportBtn.addEventListener('click', exportPng);
     resetBtn.addEventListener('click', resetUI);
+
+    // Selection event listeners
+    selectModeBtn.addEventListener('click', toggleSelectMode);
+    rectSelectBtn.addEventListener('click', () => { 
+      selectionMode = 'rect'; 
+      rectSelectBtn.classList.add('bg-gray-200');
+      brushSelectBtn.classList.remove('bg-gray-200');
+      console.log('Selection mode changed to rect');
+    });
+    brushSelectBtn.addEventListener('click', () => { 
+      selectionMode = 'brush'; 
+      brushSelectBtn.classList.add('bg-gray-200');
+      rectSelectBtn.classList.remove('bg-gray-200');
+      console.log('Selection mode changed to brush');
+    });
+    applyRegionBtn.addEventListener('click', applyRegionChanges);
+    clearRegionBtn.addEventListener('click', clearRegion);
 
     autoOtsu.addEventListener('change', ()=>{ thresh.disabled = autoOtsu.checked; if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
     thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
@@ -496,6 +864,17 @@
 
     color.addEventListener('change', ()=>{
       colorHex.value = color.value;
+      // Update colorMap with new global color
+      if(colorMap && mask) {
+        const {r,g,b} = hexToRgb(color.value);
+        for(let i=0, j=0; i<colorMap.length; i+=4, j++){
+          if(mask[j] > 0) {
+            colorMap[i] = r;
+            colorMap[i+1] = g;
+            colorMap[i+2] = b;
+          }
+        }
+      }
       renderPreview();
     });
     
@@ -521,6 +900,56 @@
     });
 
     scale.addEventListener('input', ()=>{ scaleVal.textContent = parseFloat(scale.value).toFixed(2)+'×'; });
+
+    // Canvas mouse events for selection
+    outCanvas.addEventListener('mousedown', (e) => {
+      console.log('Mouse down, isSelectMode:', isSelectMode, 'selectionMode:', selectionMode);
+      if(!isSelectMode) return;
+      e.preventDefault();
+      if(selectionMode === 'rect') {
+        startRectSelection(e);
+      } else if(selectionMode === 'brush') {
+        startBrushSelection(e);
+      }
+    });
+
+    outCanvas.addEventListener('mousemove', (e) => {
+      if(!isSelectMode) return;
+      e.preventDefault();
+      if(selectionMode === 'rect' && isDrawing) {
+        updateRectSelection(e);
+      } else if(selectionMode === 'brush' && isDrawing) {
+        updateBrushSelection(e);
+      }
+    });
+
+    outCanvas.addEventListener('mouseup', (e) => {
+      console.log('Mouse up, isSelectMode:', isSelectMode, 'isDrawing:', isDrawing);
+      if(!isSelectMode) return;
+      e.preventDefault();
+      if(selectionMode === 'rect') {
+        endRectSelection();
+      } else if(selectionMode === 'brush') {
+        endBrushSelection();
+      }
+    });
+
+    // Brush size control
+    brushSize.addEventListener('input', () => {
+      brushSizeVal.textContent = brushSize.value;
+    });
+
+    // Region color controls
+    regionColor.addEventListener('change', () => {
+      regionColorHex.value = regionColor.value;
+    });
+
+    regionColorHex.addEventListener('input', () => {
+      const hex = regionColorHex.value.trim();
+      if(/^#[0-9A-Fa-f]{6}$/.test(hex)){
+        regionColor.value = hex;
+      }
+    });
   </script>
 </body>
 </html>
