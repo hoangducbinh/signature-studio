@@ -175,7 +175,7 @@
     const scale = document.getElementById('scale');
     const scaleVal = document.getElementById('scaleVal');
 
-    // Selection tools
+    // Công cụ chọn vùng
     const selectModeBtn = document.getElementById('selectModeBtn');
     const selectionTools = document.getElementById('selectionTools');
     const rectSelectBtn = document.getElementById('rectSelectBtn');
@@ -200,10 +200,10 @@
     let workW = 0, workH = 0;
     const workCanvas = document.createElement('canvas');
     
-    // Selection state
+    // Trạng thái chọn vùng
     let isSelectMode = false;
-    let selectionMode = 'rect'; // 'rect' or 'brush'
-    let selectedRegion = null; // {x, y, w, h} for rect or points[] for brush
+    let selectionMode = 'rect'; // 'rect' hoặc 'brush'
+    let selectedRegion = null; // {x, y, w, h} cho rect hoặc points[] cho brush
     let isDrawing = false;
     let selectionCanvas = document.createElement('canvas');
     let selectionCtx = selectionCanvas.getContext('2d');
@@ -407,20 +407,20 @@
       const img = new ImageData(workW, workH);
       
       if(colorMap) {
-        // Use colorMap if available (for region-specific colors)
+        // Sử dụng colorMap nếu có (cho màu theo vùng cụ thể)
         for(let i=0, j=0; i<img.data.length; i+=4, j++){
           const a = mask[j];
           if(a > 0) {
-            img.data[i] = colorMap[i];     // R
-            img.data[i+1] = colorMap[i+1]; // G
-            img.data[i+2] = colorMap[i+2]; // B
-            img.data[i+3] = a;             // A
+            img.data[i] = colorMap[i];     // Đỏ
+            img.data[i+1] = colorMap[i+1]; // Xanh lá
+            img.data[i+2] = colorMap[i+2]; // Xanh dương
+            img.data[i+3] = a;             // Alpha
           } else {
             img.data[i] = 0; img.data[i+1] = 0; img.data[i+2] = 0; img.data[i+3] = 0;
           }
         }
-      } else {
-        // Use global color
+              } else {
+          // Sử dụng màu toàn cục
         const {r,g,b} = hexToRgb(color.value);
         for(let i=0, j=0; i<img.data.length; i+=4, j++){
           const a = mask[j];
@@ -451,7 +451,7 @@
       octx.clearRect(0,0,outCanvas.width,outCanvas.height);
       octx.drawImage(finalBlur, 0, 0);
       
-      // Draw selection overlay if in select mode
+      // Vẽ overlay chọn vùng nếu đang ở chế độ chọn
       if(isSelectMode && selectedRegion) {
         drawSelectionOverlay();
       }
@@ -474,7 +474,7 @@
 
       mask = alpha;
       
-      // Initialize colorMap with global color
+      // Khởi tạo colorMap với màu toàn cục
       const {r,g,b} = hexToRgb(color.value);
       colorMap = new Uint8ClampedArray(workW * workH * 4);
       for(let i=0, j=0; i<colorMap.length; i+=4, j++){
@@ -486,10 +486,10 @@
         }
       }
       
-      // Backup original colorMap for reset functionality
+      // Sao lưu colorMap gốc cho chức năng reset
       originalColorMap = new Uint8ClampedArray(colorMap);
       
-      // Show reset all button when image is processed
+      // Hiển thị nút reset tất cả khi ảnh được xử lý
       resetAllBtn.classList.remove('hidden');
       
       renderPreview();
@@ -511,14 +511,14 @@
           const a = mask[srcIdx];
           
           if(colorMap && a > 0) {
-            // Use colorMap if available (includes region-specific colors)
+            // Sử dụng colorMap nếu có (bao gồm màu theo vùng cụ thể)
             const colorIdx = srcIdx * 4;
-            cropped.data[dstIdx] = colorMap[colorIdx];     // R
-            cropped.data[dstIdx+1] = colorMap[colorIdx+1]; // G
-            cropped.data[dstIdx+2] = colorMap[colorIdx+2]; // B
-            cropped.data[dstIdx+3] = a;                    // A
-          } else {
-            // Fallback to global color
+            cropped.data[dstIdx] = colorMap[colorIdx];     // Đỏ
+            cropped.data[dstIdx+1] = colorMap[colorIdx+1]; // Xanh lá
+            cropped.data[dstIdx+2] = colorMap[colorIdx+2]; // Xanh dương
+            cropped.data[dstIdx+3] = a;                    // Alpha
+                      } else {
+              // Dự phòng với màu toàn cục
             const {r,g,b} = hexToRgb(color.value);
             cropped.data[dstIdx] = r;
             cropped.data[dstIdx+1] = g;
@@ -556,7 +556,7 @@
       colorHex.value = '#0000FF';
       scale.value = 1; scaleVal.textContent = '1.00×';
       
-      // Clear file input cache
+      // Xóa cache của file input
       fileInput.value = '';
       
       const ctxO = origCanvas.getContext('2d');
@@ -565,18 +565,18 @@
       ctxOut.clearRect(0,0,outCanvas.width, outCanvas.height);
       origImg = null; mask = null; colorMap = null; originalColorMap = null; workW = 0; workH = 0;
       
-      // Reset selection
+      // Reset chọn vùng
       isSelectMode = false;
       selectedRegion = null;
       selectionTools.classList.add('hidden');
       regionControls.classList.add('hidden');
       selectModeBtn.textContent = '🖱️ Chọn vùng';
       
-      // Hide reset all button
+      // Ẩn nút reset tất cả
       resetAllBtn.classList.add('hidden');
     }
 
-    // Selection functions
+    // Các hàm chọn vùng
     function toggleSelectMode() {
       isSelectMode = !isSelectMode;
       console.log('Toggle select mode:', isSelectMode);
@@ -584,7 +584,7 @@
         selectModeBtn.textContent = '❌ Thoát chọn';
         selectionTools.classList.remove('hidden');
         setupSelectionCanvas();
-        // Set default selection mode
+        // Đặt chế độ chọn mặc định
         selectionMode = 'rect';
         rectSelectBtn.classList.add('bg-gray-200');
         brushSelectBtn.classList.remove('bg-gray-200');
@@ -611,17 +611,17 @@
       ctx.save();
       
       if(selectionMode === 'rect') {
-        // Draw rectangle selection
+        // Vẽ chọn vùng hình chữ nhật
         ctx.strokeStyle = '#FF0000';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.strokeRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
         
-        // Fill with semi-transparent red
+                  // Tô màu đỏ trong suốt
         ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
         ctx.fillRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
-      } else if(selectionMode === 'brush') {
-        // Draw brush selection
+              } else if(selectionMode === 'brush') {
+          // Vẽ chọn vùng bằng cọ
         ctx.strokeStyle = '#FF0000';
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
@@ -675,7 +675,7 @@
       isDrawing = false;
       console.log('End rect selection:', selectedRegion);
       
-      // Normalize rectangle (handle negative width/height)
+      // Chuẩn hóa hình chữ nhật (xử lý chiều rộng/chiều cao âm)
       if(selectedRegion.w < 0) {
         selectedRegion.x += selectedRegion.w;
         selectedRegion.w = Math.abs(selectedRegion.w);
@@ -739,7 +739,7 @@
       const {r, g, b} = hexToRgb(regionColor.value);
       const strokeChange = parseFloat(regionStroke.value);
       
-      // Convert selection coordinates to work space
+      // Chuyển đổi tọa độ chọn vùng sang không gian làm việc
       const scale = INTERNAL_SCALE;
       const workRegion = {
         x: Math.round(selectedRegion.x * scale),
@@ -751,7 +751,7 @@
       console.log('Work region:', workRegion);
       
       if(selectionMode === 'rect') {
-        // Apply changes to rectangular region
+        // Áp dụng thay đổi cho vùng hình chữ nhật
         let changedPixels = 0;
         for(let y = workRegion.y; y < workRegion.y + workRegion.h; y++) {
           for(let x = workRegion.x; x < workRegion.x + workRegion.w; x++) {
@@ -759,12 +759,12 @@
               const idx = y * workW + x;
               const colorIdx = idx * 4;
               if(mask[idx] > 0) {
-                // Apply color change
+                // Áp dụng thay đổi màu
                 colorMap[colorIdx] = r;
                 colorMap[colorIdx + 1] = g;
                 colorMap[colorIdx + 2] = b;
                 
-                // Apply stroke change
+                // Áp dụng thay đổi độ dày nét
                 if(strokeChange !== 0) {
                   const newAlpha = Math.max(0, Math.min(255, mask[idx] + strokeChange * 50));
                   mask[idx] = newAlpha;
@@ -775,8 +775,8 @@
           }
         }
         console.log('Changed pixels in rect:', changedPixels);
-      } else if(selectionMode === 'brush') {
-        // Apply changes to brush selection
+              } else if(selectionMode === 'brush') {
+          // Áp dụng thay đổi cho chọn vùng bằng cọ
         const brushRadius = selectedRegion.brushSize * scale / 2;
         let changedPixels = 0;
         for(let i = 0; i < selectedRegion.points.length; i++) {
@@ -794,12 +794,12 @@
                   const idx = y * workW + x;
                   const colorIdx = idx * 4;
                   if(mask[idx] > 0) {
-                    // Apply color change
+                    // Áp dụng thay đổi màu
                     colorMap[colorIdx] = r;
                     colorMap[colorIdx + 1] = g;
                     colorMap[colorIdx + 2] = b;
                     
-                    // Apply stroke change
+                    // Áp dụng thay đổi độ dày nét
                     if(strokeChange !== 0) {
                       const newAlpha = Math.max(0, Math.min(255, mask[idx] + strokeChange * 50));
                       mask[idx] = newAlpha;
@@ -814,7 +814,7 @@
         console.log('Changed pixels in brush:', changedPixels);
       }
       
-      // Re-render with new mask and colors
+      // Vẽ lại với mask và màu mới
       console.log('Re-rendering with changes');
       renderPreview();
     }
@@ -839,14 +839,14 @@
       };
       
       if(selectionMode === 'rect') {
-        // Reset rectangular region to original colors
+        // Reset vùng hình chữ nhật về màu gốc
         for(let y = workRegion.y; y < workRegion.y + workRegion.h; y++) {
           for(let x = workRegion.x; x < workRegion.x + workRegion.w; x++) {
             if(x >= 0 && x < workW && y >= 0 && y < workH) {
               const idx = y * workW + x;
               const colorIdx = idx * 4;
               if(mask[idx] > 0) {
-                // Restore original colors
+                // Khôi phục màu gốc
                 colorMap[colorIdx] = originalColorMap[colorIdx];
                 colorMap[colorIdx + 1] = originalColorMap[colorIdx + 1];
                 colorMap[colorIdx + 2] = originalColorMap[colorIdx + 2];
@@ -854,8 +854,8 @@
             }
           }
         }
-      } else if(selectionMode === 'brush') {
-        // Reset brush selection to original colors
+              } else if(selectionMode === 'brush') {
+          // Reset chọn vùng bằng cọ về màu gốc
         const brushRadius = selectedRegion.brushSize * scale / 2;
         for(let i = 0; i < selectedRegion.points.length; i++) {
           const point = selectedRegion.points[i];
@@ -872,7 +872,7 @@
                   const idx = y * workW + x;
                   const colorIdx = idx * 4;
                   if(mask[idx] > 0) {
-                    // Restore original colors
+                    // Khôi phục màu gốc
                     colorMap[colorIdx] = originalColorMap[colorIdx];
                     colorMap[colorIdx + 1] = originalColorMap[colorIdx + 1];
                     colorMap[colorIdx + 2] = originalColorMap[colorIdx + 2];
@@ -884,7 +884,7 @@
         }
       }
       
-      // Clear selection and re-render
+      // Xóa chọn vùng và vẽ lại
       selectedRegion = null;
       regionControls.classList.add('hidden');
       renderPreview();
@@ -895,12 +895,12 @@
       
       console.log('Resetting all regions to original colors');
       
-      // Restore all colors to original
+      // Khôi phục tất cả màu về gốc
       for(let i = 0; i < colorMap.length; i++) {
         colorMap[i] = originalColorMap[i];
       }
       
-      // Clear selection
+      // Xóa chọn vùng
       selectedRegion = null;
       regionControls.classList.add('hidden');
       renderPreview();
@@ -915,7 +915,7 @@
         origImg = img;
         prepareWorkCanvas(w, h);
         mask = null;
-        // Show reset all button when image is loaded
+        // Hiển thị nút reset tất cả khi ảnh được tải
         resetAllBtn.classList.remove('hidden');
         process();
       };
@@ -929,7 +929,7 @@
     exportBtn.addEventListener('click', exportPng);
     resetBtn.addEventListener('click', resetUI);
 
-    // Selection event listeners
+    // Event listeners cho chọn vùng
     selectModeBtn.addEventListener('click', toggleSelectMode);
     rectSelectBtn.addEventListener('click', () => { 
       selectionMode = 'rect'; 
@@ -981,7 +981,7 @@
 
     color.addEventListener('change', ()=>{
       colorHex.value = color.value;
-      // Update colorMap with new global color
+              // Cập nhật colorMap với màu toàn cục mới
       if(colorMap && mask) {
         const {r,g,b} = hexToRgb(color.value);
         for(let i=0, j=0; i<colorMap.length; i+=4, j++){
@@ -1018,7 +1018,7 @@
 
     scale.addEventListener('input', ()=>{ scaleVal.textContent = parseFloat(scale.value).toFixed(2)+'×'; });
 
-    // Canvas mouse events for selection
+    // Event mouse cho canvas chọn vùng
     outCanvas.addEventListener('mousedown', (e) => {
       console.log('Mouse down, isSelectMode:', isSelectMode, 'selectionMode:', selectionMode);
       if(!isSelectMode) return;
@@ -1051,12 +1051,12 @@
       }
     });
 
-    // Brush size control
+    // Điều khiển kích thước cọ
     brushSize.addEventListener('input', () => {
       brushSizeVal.textContent = brushSize.value;
     });
 
-    // Region color controls
+    // Điều khiển màu vùng
     regionColor.addEventListener('change', () => {
       regionColorHex.value = regionColor.value;
     });
