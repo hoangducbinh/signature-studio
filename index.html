@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Signature Studio — Tách nền & chỉnh màu nét ký (Supersampled AA)</title>
+  <title>Signature Studio — Tách nền & chỉnh màu nét ký</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .checker {
@@ -14,1059 +14,295 @@
       background-size: 20px 20px;
       background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
     }
-    input[type="range"] { accent-color: #111827; }
-    .btn { @apply px-3 py-2 rounded-2xl shadow-sm border text-sm font-medium; }
-    .btn-primary { @apply bg-black text-white hover:bg-gray-800; }
-    .btn-ghost { @apply hover:bg-gray-100; }
-    .label { @apply text-xs uppercase tracking-wider text-gray-500; }
+    input[type="range"] { 
+      accent-color: #3b82f6; 
+      height: 6px;
+      border-radius: 3px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: #3b82f6;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn { 
+      padding: 0.75rem 1rem; 
+      border-radius: 0.75rem; 
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+      border: 1px solid #d1d5db; 
+      font-size: 0.875rem; 
+      font-weight: 500; 
+      transition: all 0.2s ease;
+    }
+    .btn-primary { 
+      background-color: #3b82f6; 
+      color: white; 
+      box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
+    }
+    .btn-primary:hover { 
+      background-color: #2563eb; 
+      box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.2);
+      transform: translateY(-1px);
+    }
+    .btn-ghost { 
+      background-color: transparent;
+      color: #374151;
+    }
+    .btn-ghost:hover { 
+      background-color: #f9fafb; 
+      border-color: #d1d5db;
+    }
+    .btn-secondary {
+      background-color: #f3f4f6;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+    .btn-secondary:hover {
+      background-color: #e5e7eb;
+    }
+    .label { 
+      font-size: 0.75rem; 
+      font-weight: 600;
+      text-transform: uppercase; 
+      letter-spacing: 0.05em; 
+      color: #4b5563; 
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    .card {
+      background-color: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+      transition: box-shadow 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .control-group {
+      padding: 1.25rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      background-color: white;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+    .canvas-container {
+      background-color: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+    .canvas-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+      background-color: #f9fafb;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+    }
+    .canvas-body {
+      background-image: linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+                        linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+                        linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 320px;
+      padding: 1rem;
+    }
+    .section-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 1rem;
+    }
+    .subsection-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 0.75rem;
+    }
+    .tooltip {
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+      line-height: 1.5;
+    }
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.125rem 0.625rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .status-active {
+      background-color: #dcfce7;
+      color: #166534;
+    }
+    .status-inactive {
+      background-color: #f3f4f6;
+      color: #4b5563;
+    }
   </style>
 </head>
-<body class="bg-white text-gray-900">
-  <header class="max-w-6xl mx-auto px-4 py-6">
-    <h1 class="text-2xl md:text-3xl font-bold">✍️ Signature Studio</h1>
-    <p class="text-gray-600 mt-1">Tách nền chữ ký từ ảnh chụp, chỉnh nét (anti‑alias + supersample), đổi màu, scale và xuất PNG nền trong — chạy 100% trên trình duyệt.</p>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 min-h-screen">
+  <header class="max-w-7xl mx-auto px-6 py-8">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+        <span style="color: #3b82f6;">✍️</span> Signature Studio
+      </h1>
+      <p class="text-gray-600 text-lg max-w-3xl mx-auto leading-relaxed">
+        Tách nền chữ ký từ ảnh chụp, chỉnh nét (anti‑alias + supersample), đổi màu chữ ký
+      </p>
+    </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 pb-24">
-    <section class="grid lg:grid-cols-3 gap-6 items-start">
-      <div class="lg:col-span-1 space-y-4">
-        <div class="p-4 border rounded-2xl">
-          <label class="label">1) Tải ảnh chữ ký</label>
-          <input id="fileInput" type="file" accept="image/*" class="mt-2 w-full" />
-          <p class="text-xs text-gray-500 mt-2">Tip: Chụp trên giấy trắng, ánh sáng đều, nét ký đậm.</p>
-        </div>
-
-        <div class="p-4 border rounded-2xl space-y-4">
-          <div>
-            <div class="flex items-center justify-between">
-              <label class="label">Ngưỡng tách nền (Threshold)</label>
-              <label class="inline-flex items-center gap-2 text-xs">
-                <input id="autoOtsu" type="checkbox" class="mr-1" checked /> Auto (Otsu)
-              </label>
-            </div>
-            <input id="thresh" type="range" min="0" max="255" value="128" class="w-full" />
-            <div class="text-xs text-gray-500">Giá trị: <span id="threshVal">128</span></div>
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between">
-              <label class="label">Độ dày nét</label>
-              <input id="strokeNum" type="number" value="0" min="-5" max="5" step="0.5" class="w-16 px-2 py-1 text-xs border rounded-md" />
-            </div>
-            <input id="stroke" type="range" min="-5" max="5" value="0" step="0.5" class="w-full" />
-            <div class="text-xs text-gray-500">Mỏng ⟵ <span id="strokeVal">0</span> ⟶ Đậm</div>
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between">
-              <label class="label">Màu chữ ký</label>
-              <div class="flex items-center gap-2">
-                <input id="color" type="color" value="#0000FF" class="w-10 h-8 border rounded-md p-0" />
-                <input id="colorHex" type="text" value="#0000FF" placeholder="#000000" class="w-20 px-2 py-1 text-xs border rounded-md" maxlength="7" />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label class="label">Scale (kích thước xuất)</label>
-            <input id="scale" type="range" min="0.25" max="3" step="0.05" value="1" class="w-full" />
-            <div class="text-xs text-gray-500"><span id="scaleVal">1.00×</span></div>
-          </div>
-
-          <div class="flex gap-2 pt-2">
-            <button id="processBtn" class="btn btn-primary">Tách nền</button>
-            <button id="resetBtn" class="btn btn-ghost">Reset</button>
-            <button id="resetAllBtn" class="btn btn-ghost hidden">🔄 Reset tất cả</button>
+  <main class="max-w-7xl mx-auto px-6 pb-24">
+    <section class="grid lg:grid-cols-3 gap-8 items-start">
+      <div class="lg:col-span-1 space-y-6">
+        <div class="control-group">
+          <h3 class="subsection-title">📁 Tải ảnh chữ ký</h3>
+          <div class="input-group">
+            <input id="fileInput" type="file" accept="image/*" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #d1d5db; border-radius: 0.5rem; background-color: white; transition: border-color 0.2s ease;" />
+            <p class="tooltip">💡 Tip: Chụp trên giấy trắng, ánh sáng đều, nét ký đậm để có kết quả tốt nhất.</p>
           </div>
         </div>
 
-        <div class="p-4 border rounded-2xl space-y-4">
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="label">Chọn vùng chỉnh sửa</label>
-              <button id="selectModeBtn" class="btn btn-ghost text-xs">🖱️ Chọn vùng</button>
+        <div class="control-group">
+          <h3 class="subsection-title">⚙️ Cài đặt xử lý</h3>
+          <div class="input-group">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="label">Ngưỡng tách nền</label>
+                <label class="inline-flex items-center gap-2 text-xs" style="background-color: #eff6ff; padding: 0.25rem 0.5rem; border-radius: 0.375rem;">
+                  <input id="autoOtsu" type="checkbox" class="mr-1" checked /> Auto (Otsu)
+                </label>
+              </div>
+              <input id="thresh" type="range" min="0" max="255" value="128" style="width: 100%;" />
+              <div class="text-xs text-gray-500 mt-1">Giá trị: <span id="threshVal" style="font-weight: 500;">128</span></div>
             </div>
-            <div id="selectionTools" class="space-y-2 hidden">
-              <div class="flex gap-2">
-                <button id="rectSelectBtn" class="btn btn-ghost text-xs flex-1">📐 Hình chữ nhật</button>
-                <button id="brushSelectBtn" class="btn btn-ghost text-xs flex-1">🖌️ Cọ vẽ</button>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="label">Độ dày nét</label>
+                <input id="strokeNum" type="number" value="0" min="-5" max="5" step="0.5" style="width: 4rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;" />
               </div>
-              <div class="flex gap-2">
-                <input id="brushSize" type="range" min="5" max="50" value="15" class="flex-1" />
-                <span class="text-xs text-gray-500 w-8 text-center"><span id="brushSizeVal">15</span>px</span>
+              <input id="stroke" type="range" min="-5" max="5" value="0" step="0.5" style="width: 100%;" />
+              <div class="text-xs text-gray-500 mt-1">Mỏng ⟵ <span id="strokeVal" style="font-weight: 500;">0</span> ⟶ Đậm</div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="label">Màu chữ ký</label>
+                <div class="flex items-center gap-2">
+                  <input id="color" type="color" value="#0000FF" style="width: 2.5rem; height: 2rem; border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0; cursor: pointer;" />
+                  <input id="colorHex" type="text" value="#0000FF" placeholder="#000000" style="width: 5rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;" maxlength="7" />
+                </div>
               </div>
+            </div>
+
+            <div>
+              <label class="label">Scale (kích thước xuất)</label>
+              <input id="scale" type="range" min="0.25" max="3" step="0.05" value="1" style="width: 100%;" />
+              <div class="text-xs text-gray-500 mt-1"><span id="scaleVal" style="font-weight: 500;">1.00×</span></div>
+            </div>
+
+            <div class="flex gap-3 pt-4">
+              <button id="processBtn" class="btn btn-primary" style="flex: 1;">🎯 Tách nền</button>
+              <button id="resetBtn" class="btn btn-secondary">🔄 Reset</button>
+              <button id="resetAllBtn" class="btn btn-secondary hidden">🔄 Reset tất cả</button>
             </div>
           </div>
-          
-          <div id="regionControls" class="space-y-2 hidden">
-            <div class="flex items-center justify-between">
-              <label class="label">Màu vùng chọn</label>
-              <div class="flex items-center gap-2">
-                <input id="regionColor" type="color" value="#0000FF" class="w-8 h-6 border rounded-md p-0" />
-                <input id="regionColorHex" type="text" value="#0000FF" placeholder="#000000" class="w-16 px-1 py-1 text-xs border rounded-md" maxlength="7" />
+        </div>
+
+        <div class="control-group">
+          <h3 class="subsection-title">🎨 Chỉnh sửa vùng</h3>
+          <div class="input-group">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <label class="label">Chọn vùng chỉnh sửa</label>
+                <button id="selectModeBtn" class="btn btn-secondary text-xs">🖱️ Chọn vùng</button>
+              </div>
+              <div id="selectionTools" class="space-y-3 hidden">
+                <div class="flex gap-2">
+                  <button id="rectSelectBtn" class="btn btn-secondary text-xs" style="flex: 1;">📐 Hình chữ nhật</button>
+                  <button id="brushSelectBtn" class="btn btn-secondary text-xs" style="flex: 1;">🖌️ Cọ vẽ</button>
+                </div>
+                <div class="flex gap-3 items-center">
+                  <label class="text-xs text-gray-600">Kích thước cọ:</label>
+                  <input id="brushSize" type="range" min="5" max="50" value="15" style="flex: 1;" />
+                  <span class="text-xs text-gray-500" style="width: 3rem; text-align: center; font-weight: 500;"><span id="brushSizeVal">15</span>px</span>
+                </div>
               </div>
             </div>
-            <div class="flex items-center justify-between">
-              <label class="label">Độ dày vùng chọn</label>
-              <input id="regionStroke" type="number" value="0" min="-3" max="3" step="0.5" class="w-16 px-2 py-1 text-xs border rounded-md" />
+            
+            <div id="regionControls" class="space-y-3 hidden">
+              <div style="padding: 0.75rem; background-color: #eff6ff; border-radius: 0.5rem; border: 1px solid #bfdbfe;">
+                <div class="flex items-center justify-between mb-2">
+                  <label class="label">Màu vùng chọn</label>
+                  <div class="flex items-center gap-2">
+                    <input id="regionColor" type="color" value="#0000FF" style="width: 2rem; height: 1.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0; cursor: pointer;" />
+                    <input id="regionColorHex" type="text" value="#0000FF" placeholder="#000000" style="width: 4rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;" maxlength="7" />
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <label class="label">Độ dày vùng chọn</label>
+                  <input id="regionStroke" type="number" value="0" min="-3" max="3" step="0.5" style="width: 4rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;" />
+                </div>
+                <div class="flex gap-2 mt-3">
+                  <button id="applyRegionBtn" class="btn btn-primary text-xs" style="flex: 1;">✅ Áp dụng</button>
+                  <button id="clearRegionBtn" class="btn btn-secondary text-xs" style="flex: 1;">❌ Xóa vùng</button>
+                </div>
+                <div class="flex gap-2 mt-2">
+                  <button id="resetRegionBtn" class="btn btn-secondary text-xs" style="flex: 1;">🔄 Reset vùng</button>
+                </div>
+              </div>
             </div>
-            <div class="flex gap-2">
-              <button id="applyRegionBtn" class="btn btn-primary text-xs flex-1">✅ Áp dụng</button>
-              <button id="clearRegionBtn" class="btn btn-ghost text-xs flex-1">❌ Xóa vùng</button>
+            
+            <div style="padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+              <button id="exportBtn" class="btn btn-primary" style="width: 100%;">⬇️ Xuất PNG nền trong</button>
+              <p class="tooltip">PNG sẽ được crop sát nét ký, nền trong suốt, màu theo chọn.</p>
             </div>
-            <div class="flex gap-2">
-              <button id="resetRegionBtn" class="btn btn-ghost text-xs flex-1">🔄 Reset vùng</button>
-            </div>
-          </div>
-          
-          <div class="pt-2 border-t">
-            <button id="exportBtn" class="btn btn-primary w-full">⬇️ Xuất PNG nền trong</button>
-            <p class="text-xs text-gray-500">PNG sẽ được crop sát nét ký, nền trong suốt, màu theo chọn.</p>
           </div>
         </div>
       </div>
 
       <div class="lg:col-span-2 grid md:grid-cols-2 gap-6">
-        <div class="border rounded-2xl overflow-hidden">
-          <div class="p-3 border-b text-sm font-medium">Ảnh gốc</div>
-          <div class="checker flex items-center justify-center min-h-[300px]">
-            <canvas id="origCanvas" class="max-w-full"></canvas>
+        <div class="canvas-container">
+          <div class="canvas-header">📷 Ảnh gốc</div>
+          <div class="canvas-body">
+            <canvas id="origCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
           </div>
         </div>
-        <div class="border rounded-2xl overflow-hidden">
-          <div class="p-3 border-b text-sm font-medium">Kết quả (preview)</div>
-          <div class="checker flex items-center justify-center min-h-[300px]">
-            <canvas id="outCanvas" class="max-w-full"></canvas>
+        <div class="canvas-container">
+          <div class="canvas-header">✨ Kết quả (preview)</div>
+          <div class="canvas-body">
+            <canvas id="outCanvas" style="max-width: 100%; max-height: 100%; object-fit: contain;"></canvas>
           </div>
         </div>
       </div>
     </section>
-
-    <section class="mt-8 text-xs text-gray-500 leading-relaxed">
-      <details>
-        <summary class="cursor-pointer select-none font-medium text-gray-700">Cách hoạt động (kỹ thuật)</summary>
-        <div class="mt-2 space-y-2">
-          <p>Pipeline: supersample ×3 ở hậu trường → soft‑mask (alpha) thay vì nhị phân → co/giãn bằng nhân đĩa → blur nhẹ → downsample khi preview/xuất để triệt răng cưa.</p>
-        </div>
-      </details>
-    </section>
   </main>
 
-  <footer class="max-w-6xl mx-auto px-4 pb-8 text-xs text-gray-400">
-    <p>© 2025 Signature Studio. Made for GitHub Pages.</p>
+  <footer class="max-w-7xl mx-auto px-6 py-8 text-center">
+    <div style="border-top: 1px solid #e5e7eb; padding-top: 2rem;">
+      <p class="text-sm text-gray-500">© 2025 Signature Studio.</p>
+    </div>
   </footer>
 
-  <script>
-    const fileInput = document.getElementById('fileInput');
-    const origCanvas = document.getElementById('origCanvas');
-    const outCanvas = document.getElementById('outCanvas');
-    const processBtn = document.getElementById('processBtn');
-    const exportBtn = document.getElementById('exportBtn');
-    const resetBtn  = document.getElementById('resetBtn');
-
-    const thresh = document.getElementById('thresh');
-    const threshVal = document.getElementById('threshVal');
-    const autoOtsu = document.getElementById('autoOtsu');
-    const stroke = document.getElementById('stroke');
-    const strokeNum = document.getElementById('strokeNum');
-    const strokeVal = document.getElementById('strokeVal');
-    const color = document.getElementById('color');
-    const colorHex = document.getElementById('colorHex');
-    const scale = document.getElementById('scale');
-    const scaleVal = document.getElementById('scaleVal');
-
-    // Công cụ chọn vùng
-    const selectModeBtn = document.getElementById('selectModeBtn');
-    const selectionTools = document.getElementById('selectionTools');
-    const rectSelectBtn = document.getElementById('rectSelectBtn');
-    const brushSelectBtn = document.getElementById('brushSelectBtn');
-    const brushSize = document.getElementById('brushSize');
-    const brushSizeVal = document.getElementById('brushSizeVal');
-    const regionControls = document.getElementById('regionControls');
-    const regionColor = document.getElementById('regionColor');
-    const regionColorHex = document.getElementById('regionColorHex');
-    const regionStroke = document.getElementById('regionStroke');
-    const applyRegionBtn = document.getElementById('applyRegionBtn');
-    const clearRegionBtn = document.getElementById('clearRegionBtn');
-    const resetRegionBtn = document.getElementById('resetRegionBtn');
-    const resetAllBtn = document.getElementById('resetAllBtn');
-
-    const INTERNAL_SCALE = 4; // xử lý hi‑res để mượt mép
-
-    let origImg = null;
-    let mask = null; // Uint8ClampedArray alpha 0..255 ở work space
-    let colorMap = null; // Uint8ClampedArray RGBA cho từng pixel
-    let originalColorMap = null; // Backup của colorMap ban đầu
-    let workW = 0, workH = 0;
-    const workCanvas = document.createElement('canvas');
-    
-    // Trạng thái chọn vùng
-    let isSelectMode = false;
-    let selectionMode = 'rect'; // 'rect' hoặc 'brush'
-    let selectedRegion = null; // {x, y, w, h} cho rect hoặc points[] cho brush
-    let isDrawing = false;
-    let selectionCanvas = document.createElement('canvas');
-    let selectionCtx = selectionCanvas.getContext('2d');
-
-    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
-
-    function drawImageToCanvas(img, canvas, maxDim=2800){
-      const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
-      const w = Math.round(img.width * ratio);
-      const h = Math.round(img.height * ratio);
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0,0,w,h);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, w, h);
-      return {w, h};
-    }
-
-    function prepareWorkCanvas(displayW, displayH){
-      workW = displayW * INTERNAL_SCALE;
-      workH = displayH * INTERNAL_SCALE;
-      workCanvas.width = workW;
-      workCanvas.height = workH;
-      const wctx = workCanvas.getContext('2d');
-      wctx.imageSmoothingEnabled = true;
-      wctx.imageSmoothingQuality = 'high';
-      wctx.drawImage(origCanvas, 0, 0, workW, workH);
-    }
-
-    function toGray(data){
-      const len = data.length/4;
-      const gray = new Uint8ClampedArray(len);
-      for(let i=0, j=0; i<data.length; i+=4, j++){
-        const r=data[i], g=data[i+1], b=data[i+2];
-        gray[j] = (0.2126*r + 0.7152*g + 0.0722*b) | 0;
-      }
-      return gray;
-    }
-
-    function otsuThreshold(gray){
-      const hist = new Uint32Array(256);
-      for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-      const total = gray.length;
-      let sum = 0; for(let t=0;t<256;t++) sum += t * hist[t];
-      let sumB=0, wB=0, wF=0, varMax=0, threshold=127;
-      for(let t=0;t<256;t++){
-        wB += hist[t]; if(wB===0) continue;
-        wF = total - wB; if(wF===0) break;
-        sumB += t * hist[t];
-        const mB = sumB / wB;
-        const mF = (sum - sumB) / wF;
-        const varBetween = wB*wF*(mB - mF)*(mB - mF);
-        if(varBetween > varMax){ varMax = varBetween; threshold = t; }
-      }
-      return threshold;
-    }
-
-    function makeSoftMask(gray, threshold, feather = 24) {
-      const len = gray.length;
-      const alpha = new Uint8ClampedArray(len);
-      const tLo = threshold - feather;
-      const tHi = threshold + feather;
-      for (let i = 0; i < len; i++) {
-        const g = gray[i];
-        let a = 0;
-        if (g <= tLo) a = 255;
-        else if (g >= tHi) a = 0;
-        else {
-          // Sử dụng smoothstep để làm mượt hơn
-          const t = (g - tLo) / (tHi - tLo);
-          const smoothT = t * t * (3 - 2 * t); // smoothstep
-          a = Math.round(255 * (1 - smoothT));
-        }
-        alpha[i] = a;
-      }
-      return alpha;
-    }
-
-    function boxBlurAlpha(alpha, w, h, r = 1) {
-      if (r <= 0) return alpha;
-      const out = new Uint8ClampedArray(alpha.length);
-      const tmp = new Uint8ClampedArray(alpha.length);
-      for (let y = 0; y < h; y++) {
-        let acc = 0, count = 0;
-        const row = y * w;
-        for (let x = 0; x < w; x++) {
-          const x0 = Math.max(0, x - r);
-          const x1 = Math.min(w - 1, x + r);
-          if (x === 0) {
-            acc = 0; count = 0;
-            for (let k = x0; k <= x1; k++) { acc += alpha[row + k]; count++; }
-          } else {
-            const prevOut = x - r - 1;
-            const nextIn  = x + r;
-            if (prevOut >= 0) { acc -= alpha[row + prevOut]; count--; }
-            if (nextIn < w)  { acc += alpha[row + nextIn];  count++; }
-          }
-          tmp[row + x] = Math.round(acc / count);
-        }
-      }
-      for (let x = 0; x < w; x++) {
-        let acc = 0, count = 0;
-        for (let y = 0; y < h; y++) {
-          const y0 = Math.max(0, y - r);
-          const y1 = Math.min(h - 1, y + r);
-          if (y === 0) {
-            acc = 0; count = 0;
-            for (let k = y0; k <= y1; k++) { acc += tmp[k * w + x]; count++; }
-          } else {
-            const prevOut = y - r - 1;
-            const nextIn  = y + r;
-            if (prevOut >= 0) { acc -= tmp[prevOut * w + x]; count--; }
-            if (nextIn < h)  { acc += tmp[nextIn * w + x];  count++; }
-          }
-          out[y * w + x] = Math.round(acc / count);
-        }
-      }
-      return out;
-    }
-
-    function dilateDisk(bin, w, h, r){
-      if(r<=0) return bin;
-      const out = new Uint8Array(bin.length);
-      const r2 = r*r;
-      for(let y=0;y<h;y++){
-        for(let x=0;x<w;x++){
-          let val = 0;
-          for(let dy=-r; dy<=r && !val; dy++){
-            const yy = y+dy; if(yy<0||yy>=h) continue;
-            const dy2 = dy*dy;
-            for(let dx=-r; dx<=r; dx++){
-              const xx = x+dx; if(xx<0||xx>=w) continue;
-              if(dy2 + dx*dx > r2) continue;
-              const idx = yy*w+xx;
-              if(bin[idx]){ val=1; break; }
-            }
-          }
-          out[y*w+x] = val;
-        }
-      }
-      return out;
-    }
-
-    function erodeDisk(bin, w, h, r){
-      if(r<=0) return bin;
-      const out = new Uint8Array(bin.length);
-      const r2 = r*r;
-      for(let y=0;y<h;y++){
-        for(let x=0;x<w;x++){
-          let val = 1;
-          for(let dy=-r; dy<=r && val; dy++){
-            const yy = y+dy; if(yy<0||yy>=h) { val=0; break; }
-            const dy2 = dy*dy;
-            for(let dx=-r; dx<=r; dx++){
-              const xx = x+dx; if(xx<0||xx>=w){ val=0; break; }
-              if(dy2 + dx*dx > r2) continue;
-              const idx = yy*w+xx;
-              if(!bin[idx]){ val=0; break; }
-            }
-          }
-          out[y*w+x] = val;
-        }
-      }
-      return out;
-    }
-
-    function alphaDilateErode(alpha, w, h, s) {
-      if (s === 0) return alpha;
-      const bin = new Uint8Array(alpha.length);
-      for (let i = 0; i < alpha.length; i++) bin[i] = alpha[i] > 0 ? 1 : 0;
-      const r = Math.abs(s);
-      const morphed = s > 0 ? dilateDisk(bin, w, h, r) : erodeDisk(bin, w, h, r);
-      const out = new Uint8ClampedArray(alpha.length);
-      for (let i = 0; i < morphed.length; i++) out[i] = morphed[i] ? 255 : 0;
-      // Tăng blur để làm mượt hơn
-      return boxBlurAlpha(out, w, h, Math.max(2, Math.round(r * 1.5)));
-    }
-
-    function hexToRgb(hex){
-      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-      return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : {r:17,g:17,b:17};
-    }
-
-    function findBoundingBox(m, w, h){
-      let minX=w, minY=h, maxX=-1, maxY=-1;
-      for(let y=0;y<h;y++){
-        for(let x=0;x<w;x++){
-          if(m[y*w+x] > 0){
-            if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
-          }
-        }
-      }
-      if(maxX<minX || maxY<minY) return {x:0,y:0,w:0,h:0};
-      return {x:minX, y:minY, w:maxX-minX+1, h:maxY-minY+1};
-    }
-
-    function renderPreview(){
-      if(!origImg || !mask) return;
-      
-      const img = new ImageData(workW, workH);
-      
-      if(colorMap) {
-        // Sử dụng colorMap nếu có (cho màu theo vùng cụ thể)
-        for(let i=0, j=0; i<img.data.length; i+=4, j++){
-          const a = mask[j];
-          if(a > 0) {
-            img.data[i] = colorMap[i];     // Đỏ
-            img.data[i+1] = colorMap[i+1]; // Xanh lá
-            img.data[i+2] = colorMap[i+2]; // Xanh dương
-            img.data[i+3] = a;             // Alpha
-          } else {
-            img.data[i] = 0; img.data[i+1] = 0; img.data[i+2] = 0; img.data[i+3] = 0;
-          }
-        }
-              } else {
-          // Sử dụng màu toàn cục
-        const {r,g,b} = hexToRgb(color.value);
-        for(let i=0, j=0; i<img.data.length; i+=4, j++){
-          const a = mask[j];
-          img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=a;
-        }
-      }
-
-      const stage = document.createElement('canvas');
-      stage.width = workW; stage.height = workH;
-      stage.getContext('2d').putImageData(img, 0, 0);
-
-      const octx = outCanvas.getContext('2d');
-      outCanvas.width = Math.round(workW / INTERNAL_SCALE);
-      outCanvas.height = Math.round(workH / INTERNAL_SCALE);
-      octx.imageSmoothingEnabled = true;
-      octx.imageSmoothingQuality = 'high';
-      octx.clearRect(0,0,outCanvas.width,outCanvas.height);
-      octx.drawImage(stage, 0, 0, outCanvas.width, outCanvas.height);
-      
-      // Thêm một lần blur nhẹ cuối cùng để làm mượt hơn
-      const finalBlur = document.createElement('canvas');
-      finalBlur.width = outCanvas.width;
-      finalBlur.height = outCanvas.height;
-      const fctx = finalBlur.getContext('2d');
-      fctx.filter = 'blur(0.5px)';
-      fctx.drawImage(outCanvas, 0, 0);
-      
-      octx.clearRect(0,0,outCanvas.width,outCanvas.height);
-      octx.drawImage(finalBlur, 0, 0);
-      
-      // Vẽ overlay chọn vùng nếu đang ở chế độ chọn
-      if(isSelectMode && selectedRegion) {
-        drawSelectionOverlay();
-      }
-    }
-
-    function process(){
-      if(!origImg){ alert('Hãy tải ảnh chữ ký trước đã nhé!'); return; }
-      const wctx = workCanvas.getContext('2d');
-      const imgData = wctx.getImageData(0,0,workW, workH);
-      const gray = toGray(imgData.data);
-
-      let t = autoOtsu.checked ? otsuThreshold(gray) : parseInt(thresh.value);
-      if(!autoOtsu.checked) t = clamp(parseInt(thresh.value), 0, 255);
-      thresh.value = t; threshVal.textContent = String(t);
-
-      let alpha = makeSoftMask(gray, t, 24);
-      alpha = boxBlurAlpha(alpha, workW, workH, 2);
-      const s = parseInt(stroke.value) * INTERNAL_SCALE;
-      alpha = alphaDilateErode(alpha, workW, workH, s);
-
-      mask = alpha;
-      
-      // Khởi tạo colorMap với màu toàn cục
-      const {r,g,b} = hexToRgb(color.value);
-      colorMap = new Uint8ClampedArray(workW * workH * 4);
-      for(let i=0, j=0; i<colorMap.length; i+=4, j++){
-        if(alpha[j] > 0) {
-          colorMap[i] = r;
-          colorMap[i+1] = g;
-          colorMap[i+2] = b;
-          colorMap[i+3] = 255;
-        }
-      }
-      
-      // Sao lưu colorMap gốc cho chức năng reset
-      originalColorMap = new Uint8ClampedArray(colorMap);
-      
-      // Hiển thị nút reset tất cả khi ảnh được xử lý
-      resetAllBtn.classList.remove('hidden');
-      
-      renderPreview();
-    }
-
-    function exportPng(){
-      if(!mask){ alert('Chưa có kết quả để xuất. Nhấn "Tách nền" trước nhé!'); return; }
-      const bbox = findBoundingBox(mask, workW, workH);
-      if(bbox.w===0 || bbox.h===0){ alert('Không phát hiện được nét ký. Hãy giảm threshold hoặc tăng độ dày nét.'); return; }
-
-      const scaleFactor = parseFloat(scale.value);
-
-      const cropped = new ImageData(bbox.w, bbox.h);
-      
-      for(let y=0; y<bbox.h; y++){
-        for(let x=0; x<bbox.w; x++){
-          const srcIdx = (bbox.y + y) * workW + (bbox.x + x);
-          const dstIdx = (y * bbox.w + x) * 4;
-          const a = mask[srcIdx];
-          
-          if(colorMap && a > 0) {
-            // Sử dụng colorMap nếu có (bao gồm màu theo vùng cụ thể)
-            const colorIdx = srcIdx * 4;
-            cropped.data[dstIdx] = colorMap[colorIdx];     // Đỏ
-            cropped.data[dstIdx+1] = colorMap[colorIdx+1]; // Xanh lá
-            cropped.data[dstIdx+2] = colorMap[colorIdx+2]; // Xanh dương
-            cropped.data[dstIdx+3] = a;                    // Alpha
-                      } else {
-              // Dự phòng với màu toàn cục
-            const {r,g,b} = hexToRgb(color.value);
-            cropped.data[dstIdx] = r;
-            cropped.data[dstIdx+1] = g;
-            cropped.data[dstIdx+2] = b;
-            cropped.data[dstIdx+3] = a;
-          }
-        }
-      }
-
-      const stage = document.createElement('canvas');
-      stage.width = bbox.w; stage.height = bbox.h;
-      stage.getContext('2d').putImageData(cropped, 0, 0);
-
-      const outW = Math.max(1, Math.round((bbox.w / INTERNAL_SCALE) * scaleFactor));
-      const outH = Math.max(1, Math.round((bbox.h / INTERNAL_SCALE) * scaleFactor));
-
-      const tmp = document.createElement('canvas');
-      tmp.width = outW; tmp.height = outH;
-      const tctx = tmp.getContext('2d');
-      tctx.imageSmoothingEnabled = true;
-      tctx.imageSmoothingQuality = 'high';
-      tctx.drawImage(stage, 0, 0, outW, outH);
-
-      const url = tmp.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'signature.png';
-      a.click();
-    }
-
-    function resetUI(){
-      thresh.value = 128; threshVal.textContent = '128'; autoOtsu.checked = true;
-      stroke.value = 0; strokeNum.value = 0; strokeVal.textContent = '0';
-      color.value = '#0000FF';
-      colorHex.value = '#0000FF';
-      scale.value = 1; scaleVal.textContent = '1.00×';
-      
-      // Xóa cache của file input
-      fileInput.value = '';
-      
-      const ctxO = origCanvas.getContext('2d');
-      ctxO.clearRect(0,0,origCanvas.width, origCanvas.height);
-      const ctxOut = outCanvas.getContext('2d');
-      ctxOut.clearRect(0,0,outCanvas.width, outCanvas.height);
-      origImg = null; mask = null; colorMap = null; originalColorMap = null; workW = 0; workH = 0;
-      
-      // Reset chọn vùng
-      isSelectMode = false;
-      selectedRegion = null;
-      selectionTools.classList.add('hidden');
-      regionControls.classList.add('hidden');
-      selectModeBtn.textContent = '🖱️ Chọn vùng';
-      
-      // Ẩn nút reset tất cả
-      resetAllBtn.classList.add('hidden');
-    }
-
-    // Các hàm chọn vùng
-    function toggleSelectMode() {
-      isSelectMode = !isSelectMode;
-      console.log('Toggle select mode:', isSelectMode);
-      if(isSelectMode) {
-        selectModeBtn.textContent = '❌ Thoát chọn';
-        selectionTools.classList.remove('hidden');
-        setupSelectionCanvas();
-        // Đặt chế độ chọn mặc định
-        selectionMode = 'rect';
-        rectSelectBtn.classList.add('bg-gray-200');
-        brushSelectBtn.classList.remove('bg-gray-200');
-      } else {
-        selectModeBtn.textContent = '🖱️ Chọn vùng';
-        selectionTools.classList.add('hidden');
-        regionControls.classList.add('hidden');
-        selectedRegion = null;
-        isDrawing = false;
-        renderPreview();
-      }
-    }
-
-    function setupSelectionCanvas() {
-      selectionCanvas.width = outCanvas.width;
-      selectionCanvas.height = outCanvas.height;
-      selectionCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
-    }
-
-    function drawSelectionOverlay() {
-      if(!selectedRegion) return;
-      
-      const ctx = outCanvas.getContext('2d');
-      ctx.save();
-      
-      if(selectionMode === 'rect') {
-        // Vẽ chọn vùng hình chữ nhật
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
-        
-                  // Tô màu đỏ trong suốt
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-        ctx.fillRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
-              } else if(selectionMode === 'brush') {
-          // Vẽ chọn vùng bằng cọ
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        
-        if(selectedRegion.points && selectedRegion.points.length > 1) {
-          ctx.beginPath();
-          ctx.moveTo(selectedRegion.points[0].x, selectedRegion.points[0].y);
-          for(let i = 1; i < selectedRegion.points.length; i++) {
-            ctx.lineTo(selectedRegion.points[i].x, selectedRegion.points[i].y);
-          }
-          ctx.stroke();
-        }
-      }
-      
-      ctx.restore();
-    }
-
-    function getCanvasCoords(e) {
-      const rect = outCanvas.getBoundingClientRect();
-      const scaleX = outCanvas.width / rect.width;
-      const scaleY = outCanvas.height / rect.height;
-      return {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY
-      };
-    }
-
-    function startRectSelection(e) {
-      const coords = getCanvasCoords(e);
-      console.log('Start rect selection at:', coords);
-      selectedRegion = {
-        x: coords.x,
-        y: coords.y,
-        w: 0,
-        h: 0
-      };
-      isDrawing = true;
-    }
-
-    function updateRectSelection(e) {
-      if(!isDrawing || !selectedRegion) return;
-      const coords = getCanvasCoords(e);
-      selectedRegion.w = coords.x - selectedRegion.x;
-      selectedRegion.h = coords.y - selectedRegion.y;
-      renderPreview();
-    }
-
-    function endRectSelection() {
-      if(!isDrawing || !selectedRegion) return;
-      isDrawing = false;
-      console.log('End rect selection:', selectedRegion);
-      
-      // Chuẩn hóa hình chữ nhật (xử lý chiều rộng/chiều cao âm)
-      if(selectedRegion.w < 0) {
-        selectedRegion.x += selectedRegion.w;
-        selectedRegion.w = Math.abs(selectedRegion.w);
-      }
-      if(selectedRegion.h < 0) {
-        selectedRegion.y += selectedRegion.h;
-        selectedRegion.h = Math.abs(selectedRegion.h);
-      }
-      
-      if(selectedRegion.w > 5 && selectedRegion.h > 5) {
-        regionControls.classList.remove('hidden');
-        console.log('Region selected, showing controls');
-        renderPreview();
-      } else {
-        selectedRegion = null;
-        console.log('Region too small, cancelled');
-      }
-    }
-
-    function startBrushSelection(e) {
-      const coords = getCanvasCoords(e);
-      selectedRegion = {
-        points: [coords],
-        brushSize: parseInt(brushSize.value)
-      };
-      isDrawing = true;
-    }
-
-    function updateBrushSelection(e) {
-      if(!isDrawing || !selectedRegion) return;
-      const coords = getCanvasCoords(e);
-      selectedRegion.points.push(coords);
-      renderPreview();
-    }
-
-    function endBrushSelection() {
-      if(!isDrawing || !selectedRegion) return;
-      isDrawing = false;
-      
-      if(selectedRegion.points.length > 2) {
-        regionControls.classList.remove('hidden');
-        renderPreview();
-      } else {
-        selectedRegion = null;
-      }
-    }
-
-    function applyRegionChanges() {
-      if(!selectedRegion || !mask || !colorMap) {
-        console.log('Cannot apply changes:', {selectedRegion: !!selectedRegion, mask: !!mask, colorMap: !!colorMap});
-        return;
-      }
-      
-      console.log('Applying region changes:', {
-        region: selectedRegion,
-        color: regionColor.value,
-        stroke: regionStroke.value,
-        mode: selectionMode
-      });
-      
-      const {r, g, b} = hexToRgb(regionColor.value);
-      const strokeChange = parseFloat(regionStroke.value);
-      
-      // Chuyển đổi tọa độ chọn vùng sang không gian làm việc
-      const scale = INTERNAL_SCALE;
-      const workRegion = {
-        x: Math.round(selectedRegion.x * scale),
-        y: Math.round(selectedRegion.y * scale),
-        w: Math.round(selectedRegion.w * scale),
-        h: Math.round(selectedRegion.h * scale)
-      };
-      
-      console.log('Work region:', workRegion);
-      
-      if(selectionMode === 'rect') {
-        // Áp dụng thay đổi cho vùng hình chữ nhật
-        let changedPixels = 0;
-        for(let y = workRegion.y; y < workRegion.y + workRegion.h; y++) {
-          for(let x = workRegion.x; x < workRegion.x + workRegion.w; x++) {
-            if(x >= 0 && x < workW && y >= 0 && y < workH) {
-              const idx = y * workW + x;
-              const colorIdx = idx * 4;
-              if(mask[idx] > 0) {
-                // Áp dụng thay đổi màu
-                colorMap[colorIdx] = r;
-                colorMap[colorIdx + 1] = g;
-                colorMap[colorIdx + 2] = b;
-                
-                // Áp dụng thay đổi độ dày nét
-                if(strokeChange !== 0) {
-                  const newAlpha = Math.max(0, Math.min(255, mask[idx] + strokeChange * 50));
-                  mask[idx] = newAlpha;
-                }
-                changedPixels++;
-              }
-            }
-          }
-        }
-        console.log('Changed pixels in rect:', changedPixels);
-              } else if(selectionMode === 'brush') {
-          // Áp dụng thay đổi cho chọn vùng bằng cọ
-        const brushRadius = selectedRegion.brushSize * scale / 2;
-        let changedPixels = 0;
-        for(let i = 0; i < selectedRegion.points.length; i++) {
-          const point = selectedRegion.points[i];
-          const workX = Math.round(point.x * scale);
-          const workY = Math.round(point.y * scale);
-          
-          for(let dy = -brushRadius; dy <= brushRadius; dy++) {
-            for(let dx = -brushRadius; dx <= brushRadius; dx++) {
-              const x = workX + dx;
-              const y = workY + dy;
-              if(x >= 0 && x < workW && y >= 0 && y < workH) {
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if(dist <= brushRadius) {
-                  const idx = y * workW + x;
-                  const colorIdx = idx * 4;
-                  if(mask[idx] > 0) {
-                    // Áp dụng thay đổi màu
-                    colorMap[colorIdx] = r;
-                    colorMap[colorIdx + 1] = g;
-                    colorMap[colorIdx + 2] = b;
-                    
-                    // Áp dụng thay đổi độ dày nét
-                    if(strokeChange !== 0) {
-                      const newAlpha = Math.max(0, Math.min(255, mask[idx] + strokeChange * 50));
-                      mask[idx] = newAlpha;
-                    }
-                    changedPixels++;
-                  }
-                }
-              }
-            }
-          }
-        }
-        console.log('Changed pixels in brush:', changedPixels);
-      }
-      
-      // Vẽ lại với mask và màu mới
-      console.log('Re-rendering with changes');
-      renderPreview();
-    }
-
-    function clearRegion() {
-      selectedRegion = null;
-      regionControls.classList.add('hidden');
-      renderPreview();
-    }
-
-    function resetRegion() {
-      if(!selectedRegion || !originalColorMap) return;
-      
-      console.log('Resetting selected region to original colors');
-      
-      const scale = INTERNAL_SCALE;
-      const workRegion = {
-        x: Math.round(selectedRegion.x * scale),
-        y: Math.round(selectedRegion.y * scale),
-        w: Math.round(selectedRegion.w * scale),
-        h: Math.round(selectedRegion.h * scale)
-      };
-      
-      if(selectionMode === 'rect') {
-        // Reset vùng hình chữ nhật về màu gốc
-        for(let y = workRegion.y; y < workRegion.y + workRegion.h; y++) {
-          for(let x = workRegion.x; x < workRegion.x + workRegion.w; x++) {
-            if(x >= 0 && x < workW && y >= 0 && y < workH) {
-              const idx = y * workW + x;
-              const colorIdx = idx * 4;
-              if(mask[idx] > 0) {
-                // Khôi phục màu gốc
-                colorMap[colorIdx] = originalColorMap[colorIdx];
-                colorMap[colorIdx + 1] = originalColorMap[colorIdx + 1];
-                colorMap[colorIdx + 2] = originalColorMap[colorIdx + 2];
-              }
-            }
-          }
-        }
-              } else if(selectionMode === 'brush') {
-          // Reset chọn vùng bằng cọ về màu gốc
-        const brushRadius = selectedRegion.brushSize * scale / 2;
-        for(let i = 0; i < selectedRegion.points.length; i++) {
-          const point = selectedRegion.points[i];
-          const workX = Math.round(point.x * scale);
-          const workY = Math.round(point.y * scale);
-          
-          for(let dy = -brushRadius; dy <= brushRadius; dy++) {
-            for(let dx = -brushRadius; dx <= brushRadius; dx++) {
-              const x = workX + dx;
-              const y = workY + dy;
-              if(x >= 0 && x < workW && y >= 0 && y < workH) {
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if(dist <= brushRadius) {
-                  const idx = y * workW + x;
-                  const colorIdx = idx * 4;
-                  if(mask[idx] > 0) {
-                    // Khôi phục màu gốc
-                    colorMap[colorIdx] = originalColorMap[colorIdx];
-                    colorMap[colorIdx + 1] = originalColorMap[colorIdx + 1];
-                    colorMap[colorIdx + 2] = originalColorMap[colorIdx + 2];
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      
-      // Xóa chọn vùng và vẽ lại
-      selectedRegion = null;
-      regionControls.classList.add('hidden');
-      renderPreview();
-    }
-
-    function resetAllRegions() {
-      if(!originalColorMap) return;
-      
-      console.log('Resetting all regions to original colors');
-      
-      // Khôi phục tất cả màu về gốc
-      for(let i = 0; i < colorMap.length; i++) {
-        colorMap[i] = originalColorMap[i];
-      }
-      
-      // Xóa chọn vùng
-      selectedRegion = null;
-      regionControls.classList.add('hidden');
-      renderPreview();
-    }
-
-    fileInput.addEventListener('change', (e)=>{
-      const file = e.target.files && e.target.files[0];
-      if(!file) return;
-      const img = new Image();
-      img.onload = ()=>{
-        const {w, h} = drawImageToCanvas(img, origCanvas);
-        origImg = img;
-        prepareWorkCanvas(w, h);
-        mask = null;
-        // Hiển thị nút reset tất cả khi ảnh được tải
-        resetAllBtn.classList.remove('hidden');
-        process();
-      };
-      img.onerror = ()=> alert('Không mở được ảnh. Hãy thử lại với file .jpg/.png/.webp');
-      const reader = new FileReader();
-      reader.onload = (ev)=>{ img.src = ev.target.result; };
-      reader.readAsDataURL(file);
-    });
-
-    processBtn.addEventListener('click', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
-    exportBtn.addEventListener('click', exportPng);
-    resetBtn.addEventListener('click', resetUI);
-
-    // Event listeners cho chọn vùng
-    selectModeBtn.addEventListener('click', toggleSelectMode);
-    rectSelectBtn.addEventListener('click', () => { 
-      selectionMode = 'rect'; 
-      rectSelectBtn.classList.add('bg-gray-200');
-      brushSelectBtn.classList.remove('bg-gray-200');
-      console.log('Selection mode changed to rect');
-    });
-    brushSelectBtn.addEventListener('click', () => { 
-      selectionMode = 'brush'; 
-      brushSelectBtn.classList.add('bg-gray-200');
-      rectSelectBtn.classList.remove('bg-gray-200');
-      console.log('Selection mode changed to brush');
-    });
-    applyRegionBtn.addEventListener('click', applyRegionChanges);
-    clearRegionBtn.addEventListener('click', clearRegion);
-    resetRegionBtn.addEventListener('click', resetRegion);
-    resetAllBtn.addEventListener('click', resetAllRegions);
-
-    autoOtsu.addEventListener('change', ()=>{ thresh.disabled = autoOtsu.checked; if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
-    thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
-    thresh.addEventListener('change', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
-
-    stroke.addEventListener('input', ()=>{
-      strokeVal.textContent = stroke.value;
-      strokeNum.value = stroke.value;
-    });
-    stroke.addEventListener('change', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
-    
-    strokeNum.addEventListener('input', ()=>{
-      const val = parseFloat(strokeNum.value);
-      if(!isNaN(val) && val >= -5 && val <= 5){
-        stroke.value = val;
-        strokeVal.textContent = val.toString();
-        if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); }
-      }
-    });
-    
-    strokeNum.addEventListener('change', ()=>{
-      const val = parseFloat(strokeNum.value);
-      if(!isNaN(val) && val >= -5 && val <= 5){
-        stroke.value = val;
-        strokeVal.textContent = val.toString();
-        if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); }
-      } else {
-        // Reset về giá trị của slider nếu nhập sai
-        strokeNum.value = stroke.value;
-      }
-    });
-
-    color.addEventListener('change', ()=>{
-      colorHex.value = color.value;
-              // Cập nhật colorMap với màu toàn cục mới
-      if(colorMap && mask) {
-        const {r,g,b} = hexToRgb(color.value);
-        for(let i=0, j=0; i<colorMap.length; i+=4, j++){
-          if(mask[j] > 0) {
-            colorMap[i] = r;
-            colorMap[i+1] = g;
-            colorMap[i+2] = b;
-          }
-        }
-      }
-      renderPreview();
-    });
-    
-    colorHex.addEventListener('input', ()=>{
-      const hex = colorHex.value.trim();
-      if(/^#[0-9A-Fa-f]{6}$/.test(hex)){
-        color.value = hex;
-        renderPreview();
-      }
-    });
-    
-    colorHex.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter'){
-        const hex = colorHex.value.trim();
-        if(/^#[0-9A-Fa-f]{6}$/.test(hex)){
-          color.value = hex;
-          renderPreview();
-        } else {
-          // Nếu không phải hex hợp lệ, reset về giá trị của color picker
-          colorHex.value = color.value;
-        }
-      }
-    });
-
-    scale.addEventListener('input', ()=>{ scaleVal.textContent = parseFloat(scale.value).toFixed(2)+'×'; });
-
-    // Event mouse cho canvas chọn vùng
-    outCanvas.addEventListener('mousedown', (e) => {
-      console.log('Mouse down, isSelectMode:', isSelectMode, 'selectionMode:', selectionMode);
-      if(!isSelectMode) return;
-      e.preventDefault();
-      if(selectionMode === 'rect') {
-        startRectSelection(e);
-      } else if(selectionMode === 'brush') {
-        startBrushSelection(e);
-      }
-    });
-
-    outCanvas.addEventListener('mousemove', (e) => {
-      if(!isSelectMode) return;
-      e.preventDefault();
-      if(selectionMode === 'rect' && isDrawing) {
-        updateRectSelection(e);
-      } else if(selectionMode === 'brush' && isDrawing) {
-        updateBrushSelection(e);
-      }
-    });
-
-    outCanvas.addEventListener('mouseup', (e) => {
-      console.log('Mouse up, isSelectMode:', isSelectMode, 'isDrawing:', isDrawing);
-      if(!isSelectMode) return;
-      e.preventDefault();
-      if(selectionMode === 'rect') {
-        endRectSelection();
-      } else if(selectionMode === 'brush') {
-        endBrushSelection();
-      }
-    });
-
-    // Điều khiển kích thước cọ
-    brushSize.addEventListener('input', () => {
-      brushSizeVal.textContent = brushSize.value;
-    });
-
-    // Điều khiển màu vùng
-    regionColor.addEventListener('change', () => {
-      regionColorHex.value = regionColor.value;
-    });
-
-    regionColorHex.addEventListener('input', () => {
-      const hex = regionColorHex.value.trim();
-      if(/^#[0-9A-Fa-f]{6}$/.test(hex)){
-        regionColor.value = hex;
-      }
-    });
-  </script>
+<script src="./script.js"></script>
 </body>
 </html>
