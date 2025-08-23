@@ -458,13 +458,13 @@ function drawSelectionOverlay() {
     ctx.setLineDash([5, 5]);
     ctx.strokeRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
     
-              // Tô màu đỏ trong suốt
+    // Tô màu đỏ trong suốt
     ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
     ctx.fillRect(selectedRegion.x, selectedRegion.y, selectedRegion.w, selectedRegion.h);
-          } else if(selectionMode === 'brush') {
-      // Vẽ chọn vùng bằng cọ
+  } else if(selectionMode === 'brush') {
+    // Vẽ chọn vùng bằng cọ
     ctx.strokeStyle = '#FF0000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = selectedRegion.brushSize || parseInt(brushSize.value);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     
@@ -474,6 +474,23 @@ function drawSelectionOverlay() {
       for(let i = 1; i < selectedRegion.points.length; i++) {
         ctx.lineTo(selectedRegion.points[i].x, selectedRegion.points[i].y);
       }
+      ctx.stroke();
+    }
+    
+    // Vẽ điểm cuối cùng với kích thước cọ hiện tại
+    if(selectedRegion.points && selectedRegion.points.length > 0) {
+      const lastPoint = selectedRegion.points[selectedRegion.points.length - 1];
+      const currentBrushSize = selectedRegion.brushSize || parseInt(brushSize.value);
+      
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.arc(lastPoint.x, lastPoint.y, currentBrushSize / 2, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#FF0000';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(lastPoint.x, lastPoint.y, currentBrushSize / 2, 0, 2 * Math.PI);
       ctx.stroke();
     }
   }
@@ -549,6 +566,8 @@ function updateBrushSelection(e) {
   if(!isDrawing || !selectedRegion) return;
   const coords = getCanvasCoords(e);
   selectedRegion.points.push(coords);
+  // Cập nhật kích thước cọ real-time
+  selectedRegion.brushSize = parseInt(brushSize.value);
   renderPreview();
 }
 
@@ -895,6 +914,11 @@ outCanvas.addEventListener('mouseup', (e) => {
 // Điều khiển kích thước cọ
 brushSize.addEventListener('input', () => {
   brushSizeVal.textContent = brushSize.value;
+  // Cập nhật kích thước cọ real-time nếu đang vẽ
+  if(isDrawing && selectedRegion && selectionMode === 'brush') {
+    selectedRegion.brushSize = parseInt(brushSize.value);
+    renderPreview();
+  }
 });
 
 // Điều khiển màu vùng
