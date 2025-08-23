@@ -76,6 +76,7 @@
           <div class="flex gap-2 pt-2">
             <button id="processBtn" class="btn btn-primary">Tách nền</button>
             <button id="resetBtn" class="btn btn-ghost">Reset</button>
+            <button id="resetAllBtn" class="btn btn-ghost hidden">🔄 Reset tất cả</button>
           </div>
         </div>
 
@@ -112,6 +113,9 @@
             <div class="flex gap-2">
               <button id="applyRegionBtn" class="btn btn-primary text-xs flex-1">✅ Áp dụng</button>
               <button id="clearRegionBtn" class="btn btn-ghost text-xs flex-1">❌ Xóa vùng</button>
+            </div>
+            <div class="flex gap-2">
+              <button id="resetRegionBtn" class="btn btn-ghost text-xs flex-1">🔄 Reset vùng</button>
             </div>
           </div>
           
@@ -184,12 +188,15 @@
     const regionStroke = document.getElementById('regionStroke');
     const applyRegionBtn = document.getElementById('applyRegionBtn');
     const clearRegionBtn = document.getElementById('clearRegionBtn');
+    const resetRegionBtn = document.getElementById('resetRegionBtn');
+    const resetAllBtn = document.getElementById('resetAllBtn');
 
     const INTERNAL_SCALE = 4; // xử lý hi‑res để mượt mép
 
     let origImg = null;
     let mask = null; // Uint8ClampedArray alpha 0..255 ở work space
     let colorMap = null; // Uint8ClampedArray RGBA cho từng pixel
+    let originalColorMap = null; // Backup của colorMap ban đầu
     let workW = 0, workH = 0;
     const workCanvas = document.createElement('canvas');
     
@@ -479,6 +486,12 @@
         }
       }
       
+      // Backup original colorMap for reset functionality
+      originalColorMap = new Uint8ClampedArray(colorMap);
+      
+      // Show reset all button when image is processed
+      resetAllBtn.classList.remove('hidden');
+      
       renderPreview();
     }
 
@@ -542,11 +555,15 @@
       color.value = '#0000FF';
       colorHex.value = '#0000FF';
       scale.value = 1; scaleVal.textContent = '1.00×';
+      
+      // Clear file input cache
+      fileInput.value = '';
+      
       const ctxO = origCanvas.getContext('2d');
       ctxO.clearRect(0,0,origCanvas.width, origCanvas.height);
       const ctxOut = outCanvas.getContext('2d');
       ctxOut.clearRect(0,0,outCanvas.width, outCanvas.height);
-      origImg = null; mask = null; colorMap = null; workW = 0; workH = 0;
+      origImg = null; mask = null; colorMap = null; originalColorMap = null; workW = 0; workH = 0;
       
       // Reset selection
       isSelectMode = false;
@@ -554,6 +571,9 @@
       selectionTools.classList.add('hidden');
       regionControls.classList.add('hidden');
       selectModeBtn.textContent = '🖱️ Chọn vùng';
+      
+      // Hide reset all button
+      resetAllBtn.classList.add('hidden');
     }
 
     // Selection functions
@@ -805,6 +825,87 @@
       renderPreview();
     }
 
+    function resetRegion() {
+      if(!selectedRegion || !originalColorMap) return;
+      
+      console.log('Resetting selected region to original colors');
+      
+      const scale = INTERNAL_SCALE;
+      const workRegion = {
+        x: Math.round(selectedRegion.x * scale),
+        y: Math.round(selectedRegion.y * scale),
+        w: Math.round(selectedRegion.w * scale),
+        h: Math.round(selectedRegion.h * scale)
+      };
+      
+      if(selectionMode === 'rect') {
+        // Reset rectangular region to original colors
+        for(let y = workRegion.y; y < workRegion.y + workRegion.h; y++) {
+          for(let x = workRegion.x; x < workRegion.x + workRegion.w; x++) {
+            if(x >= 0 && x < workW && y >= 0 && y < workH) {
+              const idx = y * workW + x;
+              const colorIdx = idx * 4;
+              if(mask[idx] > 0) {
+                // Restore original colors
+                colorMap[colorIdx] = originalColorMap[colorIdx];
+                colorMap[colorIdx + 1] = originalColorMap[colorIdx + 1];
+                colorMap[colorIdx + 2] = originalColorMap[colorIdx + 2];
+              }
+            }
+          }
+        }
+      } else if(selectionMode === 'brush') {
+        // Reset brush selection to original colors
+        const brushRadius = selectedRegion.brushSize * scale / 2;
+        for(let i = 0; i < selectedRegion.points.length; i++) {
+          const point = selectedRegion.points[i];
+          const workX = Math.round(point.x * scale);
+          const workY = Math.round(point.y * scale);
+          
+          for(let dy = -brushRadius; dy <= brushRadius; dy++) {
+            for(let dx = -brushRadius; dx <= brushRadius; dx++) {
+              const x = workX + dx;
+              const y = workY + dy;
+              if(x >= 0 && x < workW && y >= 0 && y < workH) {
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if(dist <= brushRadius) {
+                  const idx = y * workW + x;
+                  const colorIdx = idx * 4;
+                  if(mask[idx] > 0) {
+                    // Restore original colors
+                    colorMap[colorIdx] = originalColorMap[colorIdx];
+                    colorMap[colorIdx + 1] = originalColorMap[colorIdx + 1];
+                    colorMap[colorIdx + 2] = originalColorMap[colorIdx + 2];
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Clear selection and re-render
+      selectedRegion = null;
+      regionControls.classList.add('hidden');
+      renderPreview();
+    }
+
+    function resetAllRegions() {
+      if(!originalColorMap) return;
+      
+      console.log('Resetting all regions to original colors');
+      
+      // Restore all colors to original
+      for(let i = 0; i < colorMap.length; i++) {
+        colorMap[i] = originalColorMap[i];
+      }
+      
+      // Clear selection
+      selectedRegion = null;
+      regionControls.classList.add('hidden');
+      renderPreview();
+    }
+
     fileInput.addEventListener('change', (e)=>{
       const file = e.target.files && e.target.files[0];
       if(!file) return;
@@ -814,6 +915,8 @@
         origImg = img;
         prepareWorkCanvas(w, h);
         mask = null;
+        // Show reset all button when image is loaded
+        resetAllBtn.classList.remove('hidden');
         process();
       };
       img.onerror = ()=> alert('Không mở được ảnh. Hãy thử lại với file .jpg/.png/.webp');
@@ -842,6 +945,8 @@
     });
     applyRegionBtn.addEventListener('click', applyRegionChanges);
     clearRegionBtn.addEventListener('click', clearRegion);
+    resetRegionBtn.addEventListener('click', resetRegion);
+    resetAllBtn.addEventListener('click', resetAllRegions);
 
     autoOtsu.addEventListener('change', ()=>{ thresh.disabled = autoOtsu.checked; if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
     thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
