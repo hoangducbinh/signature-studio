@@ -490,16 +490,28 @@
       const scaleFactor = parseFloat(scale.value);
 
       const cropped = new ImageData(bbox.w, bbox.h);
-      const {r,g,b} = hexToRgb(color.value);
+      
       for(let y=0; y<bbox.h; y++){
         for(let x=0; x<bbox.w; x++){
           const srcIdx = (bbox.y + y) * workW + (bbox.x + x);
           const dstIdx = (y * bbox.w + x) * 4;
           const a = mask[srcIdx];
-          cropped.data[dstIdx] = r;
-          cropped.data[dstIdx+1] = g;
-          cropped.data[dstIdx+2] = b;
-          cropped.data[dstIdx+3] = a;
+          
+          if(colorMap && a > 0) {
+            // Use colorMap if available (includes region-specific colors)
+            const colorIdx = srcIdx * 4;
+            cropped.data[dstIdx] = colorMap[colorIdx];     // R
+            cropped.data[dstIdx+1] = colorMap[colorIdx+1]; // G
+            cropped.data[dstIdx+2] = colorMap[colorIdx+2]; // B
+            cropped.data[dstIdx+3] = a;                    // A
+          } else {
+            // Fallback to global color
+            const {r,g,b} = hexToRgb(color.value);
+            cropped.data[dstIdx] = r;
+            cropped.data[dstIdx+1] = g;
+            cropped.data[dstIdx+2] = b;
+            cropped.data[dstIdx+3] = a;
+          }
         }
       }
 
