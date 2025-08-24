@@ -318,14 +318,12 @@ async function process() {
 
     if(hasTransparency) {
       // Nếu ảnh đã có alpha channel, sử dụng trực tiếp
-      console.log('Using existing alpha channel');
       mask = new Uint8ClampedArray(workW * workH);
       for(let i = 3, j = 0; i < imgData.data.length; i += 4, j++) {
         mask[j] = imgData.data[i];
       }
     } else {
       // Nếu ảnh chưa có alpha channel, thực hiện tách nền
-      console.log('Extracting alpha channel');
       const gray = toGray(imgData.data);
       let t = autoOtsu.checked ? otsuThreshold(gray) : parseInt(thresh.value);
       if(!autoOtsu.checked) t = clamp(parseInt(thresh.value), 0, 255);
@@ -360,7 +358,6 @@ async function process() {
     
     renderPreview();
   } catch (error) {
-    console.error('Lỗi khi xử lý ảnh:', error);
     alert('Có lỗi xảy ra khi xử lý ảnh. Vui lòng thử lại.');
   } finally {
     hideLoading();
@@ -448,7 +445,6 @@ function resetUI(){
 // Các hàm chọn vùng
 function toggleSelectMode() {
   isSelectMode = !isSelectMode;
-  console.log('Toggle select mode:', isSelectMode);
   if(isSelectMode) {
     selectModeBtn.textContent = '❌ Thoát chọn';
     selectionTools.classList.remove('hidden');
@@ -538,7 +534,6 @@ function getCanvasCoords(e) {
 
 function startRectSelection(e) {
   const coords = getCanvasCoords(e);
-  console.log('Start rect selection at:', coords);
   selectedRegion = {
     x: coords.x,
     y: coords.y,
@@ -559,7 +554,6 @@ function updateRectSelection(e) {
 function endRectSelection() {
   if(!isDrawing || !selectedRegion) return;
   isDrawing = false;
-  console.log('End rect selection:', selectedRegion);
   
   // Chuẩn hóa hình chữ nhật (xử lý chiều rộng/chiều cao âm)
   if(selectedRegion.w < 0) {
@@ -573,11 +567,9 @@ function endRectSelection() {
   
   if(selectedRegion.w > 5 && selectedRegion.h > 5) {
     regionControls.classList.remove('hidden');
-    console.log('Region selected, showing controls');
     renderPreview();
   } else {
     selectedRegion = null;
-    console.log('Region too small, cancelled');
   }
 }
 
@@ -613,16 +605,8 @@ function endBrushSelection() {
 
 function applyRegionChanges() {
   if(!selectedRegion || !mask || !colorMap) {
-    console.log('Cannot apply changes:', {selectedRegion: !!selectedRegion, mask: !!mask, colorMap: !!colorMap});
     return;
   }
-  
-  console.log('Applying region changes:', {
-    region: selectedRegion,
-    color: regionColor.value,
-    stroke: regionStroke.value,
-    mode: selectionMode
-  });
   
   const {r, g, b} = hexToRgb(regionColor.value);
   const strokeChange = parseFloat(regionStroke.value);
@@ -636,7 +620,6 @@ function applyRegionChanges() {
     h: Math.round(selectedRegion.h * scale)
   };
   
-  console.log('Work region:', workRegion);
   
   if(selectionMode === 'rect') {
     // Áp dụng thay đổi cho vùng hình chữ nhật
@@ -662,7 +645,6 @@ function applyRegionChanges() {
         }
       }
     }
-    console.log('Changed pixels in rect:', changedPixels);
           } else if(selectionMode === 'brush') {
       // Áp dụng thay đổi cho chọn vùng bằng cọ
     const brushRadius = selectedRegion.brushSize * scale / 2;
@@ -699,11 +681,9 @@ function applyRegionChanges() {
         }
       }
     }
-    console.log('Changed pixels in brush:', changedPixels);
   }
   
   // Vẽ lại với mask và màu mới
-  console.log('Re-rendering with changes');
   renderPreview();
 }
 
@@ -715,8 +695,6 @@ function clearRegion() {
 
 function resetRegion() {
   if(!selectedRegion || !originalColorMap) return;
-  
-  console.log('Resetting selected region to original colors');
   
   const scale = INTERNAL_SCALE;
   const workRegion = {
@@ -780,8 +758,6 @@ function resetRegion() {
 
 function resetAllRegions() {
   if(!originalColorMap) return;
-  
-  console.log('Resetting all regions to original colors');
   
   // Khôi phục tất cả màu về gốc
   for(let i = 0; i < colorMap.length; i++) {
@@ -856,13 +832,11 @@ rectSelectBtn.addEventListener('click', () => {
   selectionMode = 'rect'; 
   rectSelectBtn.classList.add('bg-gray-200');
   brushSelectBtn.classList.remove('bg-gray-200');
-  console.log('Selection mode changed to rect');
 });
 brushSelectBtn.addEventListener('click', () => { 
   selectionMode = 'brush'; 
   brushSelectBtn.classList.add('bg-gray-200');
   rectSelectBtn.classList.remove('bg-gray-200');
-  console.log('Selection mode changed to brush');
 });
 applyRegionBtn.addEventListener('click', applyRegionChanges);
 clearRegionBtn.addEventListener('click', clearRegion);
@@ -939,7 +913,6 @@ colorHex.addEventListener('keydown', (e)=>{
 
 // Event mouse cho canvas chọn vùng
 outCanvas.addEventListener('mousedown', (e) => {
-  console.log('Mouse down, isSelectMode:', isSelectMode, 'selectionMode:', selectionMode);
   if(!isSelectMode) return;
   e.preventDefault();
   if(selectionMode === 'rect') {
@@ -960,7 +933,6 @@ outCanvas.addEventListener('mousemove', (e) => {
 });
 
 outCanvas.addEventListener('mouseup', (e) => {
-  console.log('Mouse up, isSelectMode:', isSelectMode, 'isDrawing:', isDrawing);
   if(!isSelectMode) return;
   e.preventDefault();
   if(selectionMode === 'rect') {
