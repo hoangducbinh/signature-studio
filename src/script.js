@@ -13,8 +13,6 @@ const strokeNum = document.getElementById('strokeNum');
 const strokeVal = document.getElementById('strokeVal');
 const color = document.getElementById('color');
 const colorHex = document.getElementById('colorHex');
-const scale = document.getElementById('scale');
-const scaleVal = document.getElementById('scaleVal');
 
 // Công cụ chọn vùng
 const selectModeBtn = document.getElementById('selectModeBtn');
@@ -298,50 +296,81 @@ function renderPreview(){
   }
 }
 
-function process(){
+async function process() {
   if(!origImg){ alert('Hãy tải ảnh chữ ký trước đã nhé!'); return; }
-  const wctx = workCanvas.getContext('2d');
-  const imgData = wctx.getImageData(0,0,workW, workH);
-  const gray = toGray(imgData.data);
-
-  let t = autoOtsu.checked ? otsuThreshold(gray) : parseInt(thresh.value);
-  if(!autoOtsu.checked) t = clamp(parseInt(thresh.value), 0, 255);
-  thresh.value = t; threshVal.textContent = String(t);
-
-  let alpha = makeSoftMask(gray, t, 24);
-  alpha = boxBlurAlpha(alpha, workW, workH, 2);
-  const s = parseInt(stroke.value) * INTERNAL_SCALE;
-  alpha = alphaDilateErode(alpha, workW, workH, s);
-
-  mask = alpha;
   
-  // Khởi tạo colorMap với màu toàn cục
-  const {r,g,b} = hexToRgb(color.value);
-  colorMap = new Uint8ClampedArray(workW * workH * 4);
-  for(let i=0, j=0; i<colorMap.length; i+=4, j++){
-    if(alpha[j] > 0) {
-      colorMap[i] = r;
-      colorMap[i+1] = g;
-      colorMap[i+2] = b;
-      colorMap[i+3] = 255;
+  showLoading();
+  
+  try {
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const wctx = workCanvas.getContext('2d');
+    const imgData = wctx.getImageData(0, 0, workW, workH);
+    
+    // Kiểm tra xem ảnh đã có alpha channel chưa
+    let hasTransparency = false;
+    for(let i = 3; i < imgData.data.length; i += 4) {
+      if(imgData.data[i] < 255) {
+        hasTransparency = true;
+        break;
+      }
     }
+
+    if(hasTransparency) {
+      // Nếu ảnh đã có alpha channel, sử dụng trực tiếp
+      console.log('Using existing alpha channel');
+      mask = new Uint8ClampedArray(workW * workH);
+      for(let i = 3, j = 0; i < imgData.data.length; i += 4, j++) {
+        mask[j] = imgData.data[i];
+      }
+    } else {
+      // Nếu ảnh chưa có alpha channel, thực hiện tách nền
+      console.log('Extracting alpha channel');
+      const gray = toGray(imgData.data);
+      let t = autoOtsu.checked ? otsuThreshold(gray) : parseInt(thresh.value);
+      if(!autoOtsu.checked) t = clamp(parseInt(thresh.value), 0, 255);
+      thresh.value = t;
+      threshVal.textContent = String(t);
+
+      let alpha = makeSoftMask(gray, t, 24);
+      alpha = boxBlurAlpha(alpha, workW, workH, 2);
+      mask = alpha;
+    }
+
+    // Áp dụng độ dày nét cho cả 2 trường hợp
+    const s = parseInt(stroke.value) * INTERNAL_SCALE;
+    if(s !== 0) {
+      mask = alphaDilateErode(mask, workW, workH, s);
+    }
+    
+    // Tạo colorMap với màu mới
+    const {r,g,b} = hexToRgb(color.value);
+    colorMap = new Uint8ClampedArray(workW * workH * 4);
+    for(let i=0, j=0; i<colorMap.length; i+=4, j++){
+      if(mask[j] > 0) {
+        colorMap[i] = r;
+        colorMap[i+1] = g;
+        colorMap[i+2] = b;
+        colorMap[i+3] = 255;
+      }
+    }
+    
+    originalColorMap = new Uint8ClampedArray(colorMap);
+    resetAllBtn.classList.remove('hidden');
+    
+    renderPreview();
+  } catch (error) {
+    console.error('Lỗi khi xử lý ảnh:', error);
+    alert('Có lỗi xảy ra khi xử lý ảnh. Vui lòng thử lại.');
+  } finally {
+    hideLoading();
   }
-  
-  // Sao lưu colorMap gốc cho chức năng reset
-  originalColorMap = new Uint8ClampedArray(colorMap);
-  
-  // Hiển thị nút reset tất cả khi ảnh được xử lý
-  resetAllBtn.classList.remove('hidden');
-  
-  renderPreview();
 }
 
 function exportPng(){
   if(!mask){ alert('Chưa có kết quả để xuất. Nhấn "Tách nền" trước nhé!'); return; }
   const bbox = findBoundingBox(mask, workW, workH);
   if(bbox.w===0 || bbox.h===0){ alert('Không phát hiện được nét ký. Hãy giảm threshold hoặc tăng độ dày nét.'); return; }
-
-  const scaleFactor = parseFloat(scale.value);
 
   const cropped = new ImageData(bbox.w, bbox.h);
   
@@ -352,14 +381,12 @@ function exportPng(){
       const a = mask[srcIdx];
       
       if(colorMap && a > 0) {
-        // Sử dụng colorMap nếu có (bao gồm màu theo vùng cụ thể)
         const colorIdx = srcIdx * 4;
-        cropped.data[dstIdx] = colorMap[colorIdx];     // Đỏ
-        cropped.data[dstIdx+1] = colorMap[colorIdx+1]; // Xanh lá
-        cropped.data[dstIdx+2] = colorMap[colorIdx+2]; // Xanh dương
-        cropped.data[dstIdx+3] = a;                    // Alpha
-                  } else {
-          // Dự phòng với màu toàn cục
+        cropped.data[dstIdx] = colorMap[colorIdx];     
+        cropped.data[dstIdx+1] = colorMap[colorIdx+1]; 
+        cropped.data[dstIdx+2] = colorMap[colorIdx+2]; 
+        cropped.data[dstIdx+3] = a;                    
+      } else {
         const {r,g,b} = hexToRgb(color.value);
         cropped.data[dstIdx] = r;
         cropped.data[dstIdx+1] = g;
@@ -370,14 +397,16 @@ function exportPng(){
   }
 
   const stage = document.createElement('canvas');
-  stage.width = bbox.w; stage.height = bbox.h;
+  stage.width = bbox.w; 
+  stage.height = bbox.h;
   stage.getContext('2d').putImageData(cropped, 0, 0);
 
-  const outW = Math.max(1, Math.round((bbox.w / INTERNAL_SCALE) * scaleFactor));
-  const outH = Math.max(1, Math.round((bbox.h / INTERNAL_SCALE) * scaleFactor));
+  const outW = Math.max(1, Math.round(bbox.w / INTERNAL_SCALE));
+  const outH = Math.max(1, Math.round(bbox.h / INTERNAL_SCALE));
 
   const tmp = document.createElement('canvas');
-  tmp.width = outW; tmp.height = outH;
+  tmp.width = outW; 
+  tmp.height = outH;
   const tctx = tmp.getContext('2d');
   tctx.imageSmoothingEnabled = true;
   tctx.imageSmoothingQuality = 'high';
@@ -395,7 +424,6 @@ function resetUI(){
   stroke.value = 0; strokeNum.value = 0; strokeVal.textContent = '0';
   color.value = '#0000FF';
   colorHex.value = '#0000FF';
-  scale.value = 1; scaleVal.textContent = '1.00×';
   
   // Xóa cache của file input
   fileInput.value = '';
@@ -766,26 +794,59 @@ function resetAllRegions() {
   renderPreview();
 }
 
-fileInput.addEventListener('change', (e)=>{
+// Thêm biến modal ở đầu file với các biến khác
+const loadingModal = document.getElementById('loadingModal');
+
+// Thêm hàm điều khiển modal
+function showLoading() {
+  loadingModal.classList.remove('hidden');
+}
+
+function hideLoading() {
+  loadingModal.classList.add('hidden');
+}
+
+// Cập nhật phần xử lý sự kiện input file
+fileInput.addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   if(!file) return;
-  const img = new Image();
-  img.onload = ()=>{
+
+  showLoading(); // Hiện loading khi bắt đầu xử lý
+
+  try {
+    const img = new Image();
+    
+    const loadImage = new Promise((resolve, reject) => {
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Không tải được ảnh'));
+    });
+
+    const reader = new FileReader();
+    reader.onload = (ev) => { img.src = ev.target.result; };
+    reader.readAsDataURL(file);
+
+    // Đợi ảnh load xong
+    await loadImage;
+    
     const {w, h} = drawImageToCanvas(img, origCanvas);
     origImg = img;
     prepareWorkCanvas(w, h);
     mask = null;
-    // Hiển thị nút reset tất cả khi ảnh được tải
     resetAllBtn.classList.remove('hidden');
     process();
-  };
-  img.onerror = ()=> alert('Không mở được ảnh. Hãy thử lại với file .jpg/.png/.webp');
-  const reader = new FileReader();
-  reader.onload = (ev)=>{ img.src = ev.target.result; };
-  reader.readAsDataURL(file);
+  } catch (error) {
+    alert('Không mở được ảnh. Hãy thử lại với file .jpg/.png/.webp');
+  } finally {
+    hideLoading(); // Ẩn loading khi hoàn thành
+  }
 });
 
-processBtn.addEventListener('click', ()=>{ if(origImg){ prepareWorkCanvas(origCanvas.width, origCanvas.height); process(); } });
+processBtn.addEventListener('click', async () => { 
+  if(origImg){ 
+    prepareWorkCanvas(origCanvas.width, origCanvas.height); 
+    await process(); 
+  } 
+});
 exportBtn.addEventListener('click', exportPng);
 resetBtn.addEventListener('click', resetUI);
 
@@ -875,8 +936,6 @@ colorHex.addEventListener('keydown', (e)=>{
     }
   }
 });
-
-scale.addEventListener('input', ()=>{ scaleVal.textContent = parseFloat(scale.value).toFixed(2)+'×'; });
 
 // Event mouse cho canvas chọn vùng
 outCanvas.addEventListener('mousedown', (e) => {
