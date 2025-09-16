@@ -1,3 +1,86 @@
+// ---------- DOM Ready Check ----------
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM Content Loaded - checking elements...');
+  console.log('Elements check after DOMContentLoaded:', {
+    thresh: !!document.getElementById('thresh'),
+    threshNum: !!document.getElementById('threshNum'), 
+    threshVal: !!document.getElementById('threshVal'),
+    stroke: !!document.getElementById('stroke')
+  });
+  
+  // Reinitialize elements after DOM is ready
+  initializeElements();
+});
+
+// Fallback if DOMContentLoaded already fired
+if (document.readyState === 'loading') {
+  // DOMContentLoaded has not fired yet
+} else {
+  // DOMContentLoaded may have already fired
+  console.log('DOM already ready - initializing immediately');
+  initializeElements();
+}
+
+function initializeElements() {
+  // Get elements
+  const thresh = document.getElementById('thresh');
+  const threshNum = document.getElementById('threshNum');
+  const threshVal = document.getElementById('threshVal');
+  
+  if (!thresh || !threshNum || !threshVal) {
+    console.error('Critical elements not found:', {thresh: !!thresh, threshNum: !!threshNum, threshVal: !!threshVal});
+    return;
+  }
+  
+  // Setup threshold controls
+  setupThresholdControls(thresh, threshNum, threshVal);
+}
+
+function setupThresholdControls(thresh, threshNum, threshVal) {
+  const debouncedThresh = debounce(async ()=>{
+    console.log('debouncedThresh called, origImg:', !!window.origImg);
+    if(!window.origImg) return;
+    window.prepareWorkCanvas(window.origCanvas.width, window.origCanvas.height);
+    await window.processAll();
+  }, 150);
+
+  thresh.addEventListener('input', ()=>{ 
+    console.log('thresh input:', thresh.value);
+    threshVal.textContent = thresh.value;
+    threshNum.value = thresh.value;
+    debouncedThresh();
+  });
+  
+  thresh.addEventListener('change', ()=>{
+    console.log('thresh change:', thresh.value);
+    threshVal.textContent = thresh.value;
+    threshNum.value = thresh.value;
+    debouncedThresh();
+  });
+
+  threshNum.addEventListener('input', ()=>{
+    console.log('threshNum input:', threshNum.value);
+    const val = parseInt(threshNum.value);
+    if(!isNaN(val) && val >= 0 && val <= 255){
+      thresh.value = val;
+      threshVal.textContent = val.toString();
+      debouncedThresh();
+    }
+  });
+  
+  threshNum.addEventListener('change', ()=>{
+    console.log('threshNum change:', threshNum.value);
+    const val = parseInt(threshNum.value);
+    if(!isNaN(val) && val >= 0 && val <= 255){
+      thresh.value = val;
+      threshVal.textContent = val.toString();
+      debouncedThresh();
+    } else {
+      threshNum.value = thresh.value;
+    }
+  });
+}
+
 const fileInput = document.getElementById('fileInput');
 const origCanvas = document.getElementById('origCanvas');
 const outCanvas = document.getElementById('outCanvas');
@@ -14,6 +97,16 @@ const strokeVal = document.getElementById('strokeVal');
 const color = document.getElementById('color');
 const colorHex = document.getElementById('colorHex');
 
+// Debug: Kiểm tra các elements có tồn tại không
+console.log('Elements check:', {
+  thresh: !!thresh,
+  threshNum: !!threshNum, 
+  threshVal: !!threshVal,
+  stroke: !!stroke,
+  strokeNum: !!strokeNum,
+  strokeVal: !!strokeVal
+});
+
 // ---------- Tunables ----------
 const INTERNAL_SCALE = 2;             // hi-res multiplier (quality)
 const MAX_DISPLAY_DIM = 1200;         // clamp long edge to reduce memory/time
@@ -22,6 +115,12 @@ const MAX_DISPLAY_DIM = 1200;         // clamp long edge to reduce memory/time
 let origImg = null;
 let workW = 0, workH = 0;             // hi-res dims
 const workCanvas = document.createElement('canvas');
+
+// Expose globals for DOM ready functions
+window.origImg = null;
+window.origCanvas = origCanvas;
+window.prepareWorkCanvas = prepareWorkCanvas;
+window.processAll = processAll;
 
 // Preview alpha cache (downscaled alpha as canvas)
 let alphaLoCanvas = document.createElement('canvas'); // only alpha
@@ -59,6 +158,7 @@ function debounce(fn, ms=80){ let t; return (...a)=>{ clearTimeout(t); t=setTime
 
 // ---------- Worker (SDF) ----------
 const workerCode = `
+// Version: 2.0 - Debug threshold
 let workW=0, workH=0;
 let baseAlphaHi = null;    // Uint8ClampedArray alpha (hi-res)
 let binHi = null;          // Uint8Array hi-res 1/0
@@ -357,6 +457,7 @@ self.onmessage = (e)=>{
   const {type} = e.data;
   if(type === 'buildBase'){
     const {imgData, width, height, pvW, pvH, customThreshold} = e.data;
+    console.log('Worker received - customThreshold:', customThreshold);
     workW = width; workH = height;
     previewW = pvW; previewH = pvH;
 
@@ -364,6 +465,7 @@ self.onmessage = (e)=>{
     
     // Sử dụng threshold từ UI hoặc thuật toán tự động
     const t = customThreshold !== undefined ? customThreshold : improvedThreshold(gray);
+    console.log('Worker using threshold:', t, '(custom:', customThreshold, 'auto:', improvedThreshold(gray), ')');
     
     // Tạo soft mask với feather nhỏ hơn để giữ chi tiết
     let alpha = makeSoftMask(gray, t, 12);
@@ -479,12 +581,15 @@ async function buildBaseAsync(){
   const pvW = Math.round(workW / INTERNAL_SCALE);
   const pvH = Math.round(workH / INTERNAL_SCALE);
   
-  // Lấy threshold từ UI
-  const customThreshold = thresh && thresh.value ? parseInt(thresh.value) : undefined;
+  // Lấy threshold từ UI - sử dụng query selector động
+  const threshElement = document.getElementById('thresh');
+  const customThreshold = threshElement && threshElement.value !== undefined ? parseInt(threshElement.value) : undefined;
+  console.log('buildBaseAsync - customThreshold:', customThreshold, 'thresh.value:', threshElement?.value);
   
   return new Promise((resolve)=>{
     const onMsg = (e)=>{
       if(e.data && e.data.type==='baseDone'){
+        console.log('Worker baseDone - threshold used:', e.data.threshold);
         worker.removeEventListener('message', onMsg);
         resolve(e.data);
       }
@@ -615,6 +720,7 @@ async function exportPng(){
 // ---------- Process flow ----------
 async function processAll(){
   if(!origImg){ alert('Hãy tải ảnh chữ ký trước đã nhé!'); return; }
+  window.origImg = origImg; // Update global reference
   previewReady = false;
   showLoading();
   try{
@@ -689,42 +795,7 @@ resetBtn.addEventListener('click', ()=>{
   alphaLoCanvas = document.createElement('canvas');
 });
 
-// Controls
-const debouncedThresh = debounce(async ()=>{
-  if(!origImg) return;
-  prepareWorkCanvas(origCanvas.width, origCanvas.height);
-  await processAll();
-}, 150);
-
-thresh && thresh.addEventListener('input', ()=>{ 
-  threshVal.textContent = thresh.value;
-  threshNum.value = thresh.value;
-  debouncedThresh();
-});
-thresh && thresh.addEventListener('change', ()=>{
-  threshVal.textContent = thresh.value;
-  threshNum.value = thresh.value;
-  debouncedThresh();
-});
-
-threshNum && threshNum.addEventListener('input', ()=>{
-  const val = parseInt(threshNum.value);
-  if(!isNaN(val) && val >= 0 && val <= 255){
-    thresh.value = val;
-    threshVal.textContent = val.toString();
-    debouncedThresh();
-  }
-});
-threshNum && threshNum.addEventListener('change', ()=>{
-  const val = parseInt(threshNum.value);
-  if(!isNaN(val) && val >= 0 && val <= 255){
-    thresh.value = val;
-    threshVal.textContent = val.toString();
-    debouncedThresh();
-  } else {
-    threshNum.value = thresh.value;
-  }
-});
+// Note: Threshold controls are now handled in setupThresholdControls() after DOM ready
 
 const debouncedStroke = debounce(async ()=>{
   if(!origImg) return;
