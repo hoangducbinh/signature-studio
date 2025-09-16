@@ -1,12 +1,5 @@
 // ---------- DOM Ready Check ----------
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('DOM Content Loaded - checking elements...');
-  console.log('Elements check after DOMContentLoaded:', {
-    thresh: !!document.getElementById('thresh'),
-    threshNum: !!document.getElementById('threshNum'), 
-    threshVal: !!document.getElementById('threshVal'),
-    stroke: !!document.getElementById('stroke')
-  });
   
   // Reinitialize elements after DOM is ready
   initializeElements();
@@ -17,7 +10,6 @@ if (document.readyState === 'loading') {
   // DOMContentLoaded has not fired yet
 } else {
   // DOMContentLoaded may have already fired
-  console.log('DOM already ready - initializing immediately');
   initializeElements();
 }
 
@@ -38,28 +30,24 @@ function initializeElements() {
 
 function setupThresholdControls(thresh, threshNum, threshVal) {
   const debouncedThresh = debounce(async ()=>{
-    console.log('debouncedThresh called, origImg:', !!window.origImg);
     if(!window.origImg) return;
     window.prepareWorkCanvas(window.origCanvas.width, window.origCanvas.height);
     await window.processAll();
   }, 150);
 
   thresh.addEventListener('input', ()=>{ 
-    console.log('thresh input:', thresh.value);
     threshVal.textContent = thresh.value;
     threshNum.value = thresh.value;
     debouncedThresh();
   });
   
   thresh.addEventListener('change', ()=>{
-    console.log('thresh change:', thresh.value);
     threshVal.textContent = thresh.value;
     threshNum.value = thresh.value;
     debouncedThresh();
   });
 
   threshNum.addEventListener('input', ()=>{
-    console.log('threshNum input:', threshNum.value);
     const val = parseInt(threshNum.value);
     if(!isNaN(val) && val >= 0 && val <= 255){
       thresh.value = val;
@@ -69,7 +57,6 @@ function setupThresholdControls(thresh, threshNum, threshVal) {
   });
   
   threshNum.addEventListener('change', ()=>{
-    console.log('threshNum change:', threshNum.value);
     const val = parseInt(threshNum.value);
     if(!isNaN(val) && val >= 0 && val <= 255){
       thresh.value = val;
@@ -97,19 +84,10 @@ const strokeVal = document.getElementById('strokeVal');
 const color = document.getElementById('color');
 const colorHex = document.getElementById('colorHex');
 
-// Debug: Kiểm tra các elements có tồn tại không
-console.log('Elements check:', {
-  thresh: !!thresh,
-  threshNum: !!threshNum, 
-  threshVal: !!threshVal,
-  stroke: !!stroke,
-  strokeNum: !!strokeNum,
-  strokeVal: !!strokeVal
-});
 
 // ---------- Tunables ----------
 const INTERNAL_SCALE = 2;             // hi-res multiplier (quality)
-const MAX_DISPLAY_DIM = 1200;         // clamp long edge to reduce memory/time
+const MAX_DISPLAY_DIM = 8000;       // clamp long edge to reduce memory/time
 
 // ---------- State ----------
 let origImg = null;
@@ -149,7 +127,7 @@ function prepareWorkCanvas(displayW, displayH){
   workH = displayH * INTERNAL_SCALE;
   workCanvas.width = workW;
   workCanvas.height = workH;
-  const wctx = workCanvas.getContext('2d');
+  const wctx = workCanvas.getContext('2d', { willReadFrequently: true });
   wctx.imageSmoothingEnabled = true;
   wctx.imageSmoothingQuality = 'high';
   wctx.drawImage(origCanvas, 0, 0, workW, workH);
@@ -457,7 +435,6 @@ self.onmessage = (e)=>{
   const {type} = e.data;
   if(type === 'buildBase'){
     const {imgData, width, height, pvW, pvH, customThreshold} = e.data;
-    console.log('Worker received - customThreshold:', customThreshold);
     workW = width; workH = height;
     previewW = pvW; previewH = pvH;
 
@@ -465,7 +442,6 @@ self.onmessage = (e)=>{
     
     // Sử dụng threshold từ UI hoặc thuật toán tự động
     const t = customThreshold !== undefined ? customThreshold : improvedThreshold(gray);
-    console.log('Worker using threshold:', t, '(custom:', customThreshold, 'auto:', improvedThreshold(gray), ')');
     
     // Tạo soft mask với feather nhỏ hơn để giữ chi tiết
     let alpha = makeSoftMask(gray, t, 12);
@@ -564,7 +540,7 @@ function rebuildPreviewCanvasFromMask(mask, w, h){
   previewReady = false;
   outCanvas.width = w; outCanvas.height = h;
   alphaLoCanvas.width = w; alphaLoCanvas.height = h;
-  const actx = alphaLoCanvas.getContext('2d');
+  const actx = alphaLoCanvas.getContext('2d', { willReadFrequently: true });
   const img = actx.createImageData(w, h);
   for(let i=0,j=0;i<img.data.length;i+=4,j++){
     img.data[i]=0; img.data[i+1]=0; img.data[i+2]=0; img.data[i+3]=mask[j];
@@ -576,7 +552,7 @@ function rebuildPreviewCanvasFromMask(mask, w, h){
 
 // ---------- Build & Morph ----------
 async function buildBaseAsync(){
-  const wctx = workCanvas.getContext('2d');
+  const wctx = workCanvas.getContext('2d', { willReadFrequently: true });
   const imgData = wctx.getImageData(0, 0, workW, workH);
   const pvW = Math.round(workW / INTERNAL_SCALE);
   const pvH = Math.round(workH / INTERNAL_SCALE);
@@ -584,12 +560,10 @@ async function buildBaseAsync(){
   // Lấy threshold từ UI - sử dụng query selector động
   const threshElement = document.getElementById('thresh');
   const customThreshold = threshElement && threshElement.value !== undefined ? parseInt(threshElement.value) : undefined;
-  console.log('buildBaseAsync - customThreshold:', customThreshold, 'thresh.value:', threshElement?.value);
   
   return new Promise((resolve)=>{
     const onMsg = (e)=>{
       if(e.data && e.data.type==='baseDone'){
-        console.log('Worker baseDone - threshold used:', e.data.threshold);
         worker.removeEventListener('message', onMsg);
         resolve(e.data);
       }
@@ -659,7 +633,7 @@ async function exportPng(){
     const hiAlpha = document.createElement('canvas');
     hiAlpha.width = w; // Giữ nguyên kích thước hi-res
     hiAlpha.height = h;
-    const hctx = hiAlpha.getContext('2d');
+    const hctx = hiAlpha.getContext('2d', { willReadFrequently: true });
     const img = hctx.createImageData(w, h);
     
     // Điền toàn bộ mask vào imageData
@@ -679,7 +653,7 @@ async function exportPng(){
     const alphaOut = document.createElement('canvas');
     alphaOut.width = outW; 
     alphaOut.height = outH;
-    const actx = alphaOut.getContext('2d');
+    const actx = alphaOut.getContext('2d', { willReadFrequently: true });
     actx.imageSmoothingEnabled = true;
     actx.imageSmoothingQuality = 'high';
     actx.drawImage(hiAlpha, 0, 0, outW, outH);
@@ -688,7 +662,7 @@ async function exportPng(){
     const final = document.createElement('canvas');
     final.width = outW;
     final.height = outH;
-    const fctx = final.getContext('2d');
+    const fctx = final.getContext('2d', { willReadFrequently: true });
     
     // Tạo nền trong suốt
     fctx.clearRect(0, 0, outW, outH);
