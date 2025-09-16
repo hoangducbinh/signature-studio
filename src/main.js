@@ -1,4 +1,3 @@
-
 const fileInput = document.getElementById('fileInput');
 const origCanvas = document.getElementById('origCanvas');
 const outCanvas = document.getElementById('outCanvas');
@@ -7,6 +6,7 @@ const exportBtn = document.getElementById('exportBtn');
 const resetBtn  = document.getElementById('resetBtn');
 
 const thresh = document.getElementById('thresh');
+const threshNum = document.getElementById('threshNum');
 const threshVal = document.getElementById('threshVal');
 const stroke = document.getElementById('stroke');
 const strokeNum = document.getElementById('strokeNum');
@@ -15,8 +15,8 @@ const color = document.getElementById('color');
 const colorHex = document.getElementById('colorHex');
 
 // ---------- Tunables ----------
-const INTERNAL_SCALE = 4;             // hi-res multiplier (quality)
-const MAX_DISPLAY_DIM = 2000;         // clamp long edge to reduce memory/time
+const INTERNAL_SCALE = 2;             // hi-res multiplier (quality)
+const MAX_DISPLAY_DIM = 1200;         // clamp long edge to reduce memory/time
 
 // ---------- State ----------
 let origImg = null;
@@ -74,36 +74,169 @@ function toGray(data){
   }
   return gray;
 }
-function otsuThreshold(gray){
+
+// Cải tiến: Phân tích histogram để tìm background và foreground
+function analyzeHistogram(gray) {
   const hist = new Uint32Array(256);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = gray.length;
-  let sum = 0; for(let t=0;t<256;t++) sum += t * hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, threshold=127;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    wF = total - wB; if(wF===0) break;
-    sumB += t * hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const varBetween = wB*wF*(mB - mF)*(mB - mF);
-    if(varBetween > varMax){ varMax = varBetween; threshold = t; }
+  for(let i = 0; i < gray.length; i++) {
+    hist[gray[i]]++;
   }
+  
+  // Tìm peak chính (thường là background - màu sáng)
+  let maxCount = 0, backgroundPeak = 255;
+  for(let i = 128; i < 256; i++) { // Tìm trong vùng sáng
+    if(hist[i] > maxCount) {
+      maxCount = hist[i];
+      backgroundPeak = i;
+    }
+  }
+  
+  // Tìm valley giữa background và foreground
+  let minCount = maxCount, valley = backgroundPeak;
+  for(let i = backgroundPeak - 50; i >= 50; i--) {
+    if(hist[i] < minCount) {
+      minCount = hist[i];
+      valley = i;
+    }
+  }
+  
+  return { backgroundPeak, valley, histogram: hist };
+}
+
+function improvedThreshold(gray) {
+  const analysis = analyzeHistogram(gray);
+  
+  // Sử dụng valley làm threshold ban đầu
+  let threshold = analysis.valley;
+  
+  // Điều chỉnh dựa trên distribution
+  const total = gray.length;
+  let darkPixels = 0;
+  for(let i = 0; i <= threshold; i++) {
+    darkPixels += analysis.histogram[i];
+  }
+  
+  const darkRatio = darkPixels / total;
+  
+  // Nếu quá nhiều pixel tối (>30%), tăng threshold
+  if(darkRatio > 0.3) {
+    threshold = Math.min(threshold + 20, 200);
+  }
+  // Nếu quá ít pixel tối (<5%), giảm threshold  
+  else if(darkRatio < 0.05) {
+    threshold = Math.max(threshold - 20, 50);
+  }
+  
   return threshold;
 }
-function makeSoftMask(gray, threshold, feather = 24) {
+
+// Cải tiến: Làm sạch noise bằng morphology
+function cleanNoise(binary, w, h) {
+  const cleaned = new Uint8Array(binary.length);
+  
+  // Erosion để loại bỏ noise nhỏ
+  for(let y = 1; y < h - 1; y++) {
+    for(let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      if(binary[idx] === 1) {
+        let keep = true;
+        // Kiểm tra 3x3 neighborhood
+        for(let dy = -1; dy <= 1 && keep; dy++) {
+          for(let dx = -1; dx <= 1 && keep; dx++) {
+            if(binary[(y + dy) * w + (x + dx)] === 0) {
+              keep = false;
+            }
+          }
+        }
+        cleaned[idx] = keep ? 1 : 0;
+      }
+    }
+  }
+  
+  // Dilation để khôi phục kích thước
+  const result = new Uint8Array(binary.length);
+  for(let y = 1; y < h - 1; y++) {
+    for(let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      let hasNeighbor = false;
+      
+      for(let dy = -1; dy <= 1 && !hasNeighbor; dy++) {
+        for(let dx = -1; dx <= 1 && !hasNeighbor; dx++) {
+          if(cleaned[(y + dy) * w + (x + dx)] === 1) {
+            hasNeighbor = true;
+          }
+        }
+      }
+      result[idx] = hasNeighbor ? 1 : 0;
+    }
+  }
+  
+  return result;
+}
+
+// Cải tiến: Component analysis để loại bỏ component nhỏ
+function removeSmallComponents(binary, w, h, minSize = 100) {
+  const visited = new Uint8Array(binary.length);
+  const result = new Uint8Array(binary.length);
+  
+  function floodFill(startIdx, component) {
+    const stack = [startIdx];
+    const pixels = [];
+    
+    while(stack.length > 0) {
+      const idx = stack.pop();
+      if(visited[idx] || binary[idx] === 0) continue;
+      
+      visited[idx] = 1;
+      pixels.push(idx);
+      
+      const y = Math.floor(idx / w);
+      const x = idx % w;
+      
+      // Thêm 4-connected neighbors
+      if(x > 0) stack.push(idx - 1);
+      if(x < w - 1) stack.push(idx + 1);
+      if(y > 0) stack.push(idx - w);
+      if(y < h - 1) stack.push(idx + w);
+    }
+    
+    return pixels;
+  }
+  
+  for(let i = 0; i < binary.length; i++) {
+    if(binary[i] === 1 && !visited[i]) {
+      const component = floodFill(i, []);
+      
+      // Chỉ giữ component đủ lớn
+      if(component.length >= minSize) {
+        for(const idx of component) {
+          result[idx] = 1;
+        }
+      }
+    }
+  }
+  
+  return result;
+}
+
+function makeSoftMask(gray, threshold, feather = 16) {
   const len = gray.length;
   const alpha = new Uint8ClampedArray(len);
   const tLo = threshold - feather;
   const tHi = threshold + feather;
+  
   for (let i = 0; i < len; i++) {
     const g = gray[i];
     let a = 0;
-    if (g <= tLo) a = 255;
-    else if (g >= tHi) a = 0;
-    else {
+    
+    if (g <= tLo) {
+      a = 255; // Chắc chắn là foreground (tối)
+    } else if (g >= tHi) {
+      a = 0;   // Chắc chắn là background (sáng)
+    } else {
+      // Vùng chuyển tiếp - làm mềm
       const t = (g - tLo) / (tHi - tLo);
-      const smoothT = t * t * (3 - 2 * t);
+      const smoothT = t * t * (3 - 2 * t); // Smoothstep
       a = Math.round(255 * (1 - smoothT));
     }
     alpha[i] = a;
@@ -151,9 +284,11 @@ function blurAlphaBox(alpha, w, h, r){
   }
   return out;
 }
-function binarizeFromAlpha(alpha){
+function binarizeFromAlpha(alpha, threshold = 128){
   const out = new Uint8Array(alpha.length);
-  for(let i=0;i<alpha.length;i++) out[i] = alpha[i]>0 ? 1 : 0;
+  for(let i = 0; i < alpha.length; i++) {
+    out[i] = alpha[i] > threshold ? 1 : 0;
+  }
   return out;
 }
 // ---- 1D EDT ----
@@ -221,30 +356,43 @@ function downscaleBin(src, sw, sh, dw, dh){
 self.onmessage = (e)=>{
   const {type} = e.data;
   if(type === 'buildBase'){
-    const {imgData, width, height, pvW, pvH} = e.data;
+    const {imgData, width, height, pvW, pvH, customThreshold} = e.data;
     workW = width; workH = height;
     previewW = pvW; previewH = pvH;
 
     const gray = toGray(imgData.data);
-    const t = otsuThreshold(gray);
-    let alpha = makeSoftMask(gray, t, 24);
-    alpha = blurAlphaBox(alpha, workW, workH, 2);
+    
+    // Sử dụng threshold từ UI hoặc thuật toán tự động
+    const t = customThreshold !== undefined ? customThreshold : improvedThreshold(gray);
+    
+    // Tạo soft mask với feather nhỏ hơn để giữ chi tiết
+    let alpha = makeSoftMask(gray, t, 12);
+    
+    // Blur nhẹ để làm mượt
+    alpha = blurAlphaBox(alpha, workW, workH, 1);
+    
     baseAlphaHi = alpha;
-    const bin = binarizeFromAlpha(alpha);
+    
+    // Tạo binary mask và làm sạch
+    let bin = binarizeFromAlpha(alpha, 64); // Threshold thấp hơn để giữ nhiều detail
+    bin = cleanNoise(bin, workW, workH);
+    bin = removeSmallComponents(bin, workW, workH, Math.max(50, workW * workH / 5000));
+    
     // SDF preview
     const binPv = downscaleBin(bin, workW, workH, previewW, previewH);
     const dInSq = edt2d(binPv, previewW, previewH);
     const invPv = new Uint8Array(binPv.length);
-    for(let i=0;i<binPv.length;i++) invPv[i] = binPv[i] ? 0 : 1;
+    for(let i = 0; i < binPv.length; i++) {
+      invPv[i] = binPv[i] ? 0 : 1;
+    }
     const dOutSq = edt2d(invPv, previewW, previewH);
     sdfPreview = new Float32Array(binPv.length);
-    for(let i=0;i<binPv.length;i++){
+    for(let i = 0; i < binPv.length; i++){
       const inD = Math.sqrt(dInSq[i]);
       const outD = Math.sqrt(dOutSq[i]);
-      // Signed distance: positive inside, negative outside
-      sdfPreview[i] = outD - inD;
+      sdfPreview[i] = outD - inD; // positive inside, negative outside
     }
-    // Keep hi-res binary for later export (avoid recomputing)
+    
     binHi = bin;
     self.postMessage({type:'baseDone', threshold:t}, []);
   }
@@ -330,6 +478,10 @@ async function buildBaseAsync(){
   const imgData = wctx.getImageData(0, 0, workW, workH);
   const pvW = Math.round(workW / INTERNAL_SCALE);
   const pvH = Math.round(workH / INTERNAL_SCALE);
+  
+  // Lấy threshold từ UI
+  const customThreshold = thresh && thresh.value ? parseInt(thresh.value) : undefined;
+  
   return new Promise((resolve)=>{
     const onMsg = (e)=>{
       if(e.data && e.data.type==='baseDone'){
@@ -338,7 +490,15 @@ async function buildBaseAsync(){
       }
     };
     worker.addEventListener('message', onMsg);
-    worker.postMessage({type:'buildBase', imgData, width:workW, height:workH, pvW, pvH});
+    worker.postMessage({
+      type:'buildBase', 
+      imgData, 
+      width:workW, 
+      height:workH, 
+      pvW, 
+      pvH,
+      customThreshold
+    });
   });
 }
 async function previewMorphAsync(strokePrevPx){
@@ -389,44 +549,61 @@ async function exportPng(){
   try{
     const strokeHiPx = Math.round((parseFloat(stroke.value)||0) * INTERNAL_SCALE);
     const {mask, w, h} = await exportHiResMaskAsync(strokeHiPx);
-    // bbox crop
-    const bbox = findBoundingBox(mask, w, h);
-    if(bbox.w===0 || bbox.h===0){ alert('Không phát hiện được nét ký.'); hideLoading(); return; }
+    
+    // Tạo alpha canvas với kích thước hi-res đầy đủ (không cắt)
     const hiAlpha = document.createElement('canvas');
-    hiAlpha.width = bbox.w; hiAlpha.height = bbox.h;
+    hiAlpha.width = w; // Giữ nguyên kích thước hi-res
+    hiAlpha.height = h;
     const hctx = hiAlpha.getContext('2d');
-    const img = hctx.createImageData(bbox.w, bbox.h);
-    for(let y=0;y<bbox.h;y++){
-      for(let x=0;x<bbox.w;x++){
-        const a = mask[(bbox.y+y)*w + (bbox.x+x)];
-        const idx = (y*bbox.w + x)*4;
-        img.data[idx]=0; img.data[idx+1]=0; img.data[idx+2]=0; img.data[idx+3]=a;
-      }
+    const img = hctx.createImageData(w, h);
+    
+    // Điền toàn bộ mask vào imageData
+    for(let i = 0; i < mask.length; i++){
+      const idx = i * 4;
+      img.data[idx] = 0;     // R
+      img.data[idx + 1] = 0; // G  
+      img.data[idx + 2] = 0; // B
+      img.data[idx + 3] = mask[i]; // A
     }
     hctx.putImageData(img, 0, 0);
-    // downscale to preview scale for output
-    const outW = Math.max(1, Math.round(bbox.w / INTERNAL_SCALE));
-    const outH = Math.max(1, Math.round(bbox.h / INTERNAL_SCALE));
+    
+    // Downscale về kích thước ảnh gốc (giữ nguyên tỷ lệ của ảnh gốc)
+    const outW = origCanvas.width;  // Kích thước canvas hiển thị gốc
+    const outH = origCanvas.height;
+    
     const alphaOut = document.createElement('canvas');
-    alphaOut.width = outW; alphaOut.height = outH;
+    alphaOut.width = outW; 
+    alphaOut.height = outH;
     const actx = alphaOut.getContext('2d');
     actx.imageSmoothingEnabled = true;
     actx.imageSmoothingQuality = 'high';
     actx.drawImage(hiAlpha, 0, 0, outW, outH);
-    // paint color + alpha
+    
+    // Tạo ảnh cuối cùng với màu + alpha
     const final = document.createElement('canvas');
-    final.width = outW; final.height = outH;
+    final.width = outW;
+    final.height = outH;
     const fctx = final.getContext('2d');
+    
+    // Tạo nền trong suốt
+    fctx.clearRect(0, 0, outW, outH);
+    
+    // Vẽ màu chữ ký
     fctx.fillStyle = color.value || '#000000';
-    fctx.fillRect(0,0,outW,outH);
+    fctx.fillRect(0, 0, outW, outH);
+    
+    // Áp dụng alpha mask
     fctx.globalCompositeOperation = 'destination-in';
     fctx.drawImage(alphaOut, 0, 0);
     fctx.globalCompositeOperation = 'source-over';
+    
+    // Xuất file
     const url = final.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url;
     a.download = 'signature.png';
     a.click();
+    
   }catch(e){
     console.error(e);
     alert('Lỗi khi xuất PNG.');
@@ -499,6 +676,7 @@ processBtn && processBtn.addEventListener('click', async () => {
 exportBtn.addEventListener('click', exportPng);
 resetBtn.addEventListener('click', ()=>{
   thresh && (thresh.value = 128);
+  threshNum && (threshNum.value = 128);
   threshVal && (threshVal.textContent = '128');
   stroke.value = 0; strokeNum.value = 0; strokeVal.textContent = '0';
   color.value = '#0000FF'; colorHex.value = '#0000FF';
@@ -512,8 +690,41 @@ resetBtn.addEventListener('click', ()=>{
 });
 
 // Controls
-thresh && thresh.addEventListener('input', ()=>{ threshVal.textContent = thresh.value; });
-thresh && thresh.addEventListener('change', ()=>{});
+const debouncedThresh = debounce(async ()=>{
+  if(!origImg) return;
+  prepareWorkCanvas(origCanvas.width, origCanvas.height);
+  await processAll();
+}, 150);
+
+thresh && thresh.addEventListener('input', ()=>{ 
+  threshVal.textContent = thresh.value;
+  threshNum.value = thresh.value;
+  debouncedThresh();
+});
+thresh && thresh.addEventListener('change', ()=>{
+  threshVal.textContent = thresh.value;
+  threshNum.value = thresh.value;
+  debouncedThresh();
+});
+
+threshNum && threshNum.addEventListener('input', ()=>{
+  const val = parseInt(threshNum.value);
+  if(!isNaN(val) && val >= 0 && val <= 255){
+    thresh.value = val;
+    threshVal.textContent = val.toString();
+    debouncedThresh();
+  }
+});
+threshNum && threshNum.addEventListener('change', ()=>{
+  const val = parseInt(threshNum.value);
+  if(!isNaN(val) && val >= 0 && val <= 255){
+    thresh.value = val;
+    threshVal.textContent = val.toString();
+    debouncedThresh();
+  } else {
+    threshNum.value = thresh.value;
+  }
+});
 
 const debouncedStroke = debounce(async ()=>{
   if(!origImg) return;

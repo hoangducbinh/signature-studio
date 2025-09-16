@@ -69,10 +69,10 @@
               <div class="field">
                 <div class="field-top">
                   <label class="label">Ngưỡng tách nền</label>
-                  <div class="muted">Tự động (Otsu)</div>
+                  <input id="threshNum" type="number" value="128" min="0" max="255" step="1" class="number" />
                 </div>
-                <input id="thresh" class="hidden" type="range" min="0" max="255" value="128" />
-                <div class="muted hidden">Giá trị: <span id="threshVal" class="bold">128</span></div>
+                <input id="thresh" type="range" min="0" max="255" value="128" />
+                <div class="muted">Sáng ⟵ <span id="threshVal" class="bold">128</span> ⟶ Tối</div>
               </div>
 
               <div class="field">
@@ -123,10 +123,6 @@
       </div>
     </section>
   </main>
-
-  <!-- <footer class="container footer">
-    <p class="muted small">© 2025 hoangducbinh.prod · <a href="https://github.com/hoangducbinh" target="_blank" rel="noopener noreferrer">GitHub</a></p>
-  </footer> -->
 
   <div id="loadingModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Đang xử lý ảnh">
     <div class="modal-content">
