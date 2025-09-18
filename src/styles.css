@@ -113,17 +113,25 @@ input.hex{ width:96px; padding:6px 8px; font-size:12.5px; border:1px solid var(-
 .btn.full{ width:100%; }
 
 /* ===== Stage / Canvas ===== */
-.stage{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-@media (max-width: 960px){
-  .stage{ grid-template-columns:1fr; }
-}
+.stage{ display:grid; grid-template-columns:1fr; gap:20px; }
 .canvas-wrap{ padding:0; overflow:hidden; }
 .canvas-header{
   padding:12px 16px; border-bottom:1px solid var(--line); background:#f3f4f6; color:#374151;
-  font-size:13px; font-weight:600;
+  font-size:13px; font-weight:600; display:flex; justify-content:space-between; align-items:center;
 }
+.canvas-title{ font-weight:600; }
+.canvas-controls{ display:flex; gap:8px; }
+.canvas-btn{
+  display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line);
+  background:#fff; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;
+  transition:all .15s ease; color:#6b7280;
+}
+.canvas-btn:hover{ background:#f9fafb; border-color:#d1d5db; }
+.canvas-btn.active{ background:var(--primary); color:#fff; border-color:var(--primary); }
+.canvas-btn svg{ width:14px; height:14px; }
+
 .canvas-body{
-  display:flex; align-items:center; justify-content:center; min-height:320px; padding:18px;
+  display:flex; align-items:center; justify-content:center; min-height:400px; padding:18px;
   background-image: linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
                     linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
                     linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
@@ -132,6 +140,46 @@ input.hex{ width:96px; padding:6px 8px; font-size:12.5px; border:1px solid var(-
   background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
 }
 canvas{ max-width:100%; max-height:100%; object-fit:contain; display:block; }
+
+/* Upload prompt */
+.upload-prompt{
+  text-align:center; color:var(--muted); max-width:300px;
+}
+.upload-icon{
+  margin:0 auto 16px; width:64px; height:64px; display:grid; place-items:center;
+  background:#f3f4f6; border:2px dashed #d1d5db; border-radius:12px; color:#9ca3af;
+}
+.upload-prompt h3{
+  margin:0 0 8px; font-size:18px; color:var(--ink); font-weight:600;
+}
+.upload-prompt p{
+  margin:0 0 12px; font-size:14px; line-height:1.5;
+}
+.upload-formats{
+  font-size:12px; color:#9ca3af; font-weight:500; letter-spacing:0.5px;
+}
+
+/* ===== Status Indicators ===== */
+.canvas-status {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.canvas-status.loading {
+  background: #fef3c7;
+  color: #d97706;
+}
+.canvas-status.success {
+  background: #d1fae5;
+  color: #059669;
+}
+.canvas-status.error {
+  background: #fee2e2;
+  color: #dc2626;
+}
 
 /* ===== Modal ===== */
 .modal{

@@ -1,80 +1,67 @@
-// ---------- DOM Ready Check ----------
-document.addEventListener('DOMContentLoaded', function() {
-  
-  // Reinitialize elements after DOM is ready
-  initializeElements();
-});
-
-// Fallback if DOMContentLoaded already fired
-if (document.readyState === 'loading') {
-  // DOMContentLoaded has not fired yet
-} else {
-  // DOMContentLoaded may have already fired
-  initializeElements();
-}
+// ---------- DOM Ready & Controls ----------
+document.addEventListener('DOMContentLoaded', initializeElements);
+if (document.readyState !== 'loading') initializeElements();
 
 function initializeElements() {
-  // Get elements
   const thresh = document.getElementById('thresh');
   const threshNum = document.getElementById('threshNum');
   const threshVal = document.getElementById('threshVal');
   
   if (!thresh || !threshNum || !threshVal) {
-    console.error('Critical elements not found:', {thresh: !!thresh, threshNum: !!threshNum, threshVal: !!threshVal});
+    console.error('Critical elements not found');
     return;
   }
   
-  // Setup threshold controls
   setupThresholdControls(thresh, threshNum, threshVal);
+  setupDragDrop();
+  showUploadPrompt(); // Initialize with upload prompt
 }
 
 function setupThresholdControls(thresh, threshNum, threshVal) {
-  const debouncedThresh = debounce(async ()=>{
-    if(!window.origImg) return;
+  const debouncedThresh = debounce(async () => {
+    if (!window.origImg) return;
     window.prepareWorkCanvas(window.origCanvas.width, window.origCanvas.height);
     await window.processAll();
   }, 150);
 
-  thresh.addEventListener('input', ()=>{ 
+  const updateThreshold = () => {
     threshVal.textContent = thresh.value;
     threshNum.value = thresh.value;
     debouncedThresh();
-  });
-  
-  thresh.addEventListener('change', ()=>{
-    threshVal.textContent = thresh.value;
-    threshNum.value = thresh.value;
-    debouncedThresh();
-  });
+  };
 
-  threshNum.addEventListener('input', ()=>{
+  thresh.addEventListener('input', updateThreshold);
+  thresh.addEventListener('change', updateThreshold);
+
+  threshNum.addEventListener('input', () => {
     const val = parseInt(threshNum.value);
-    if(!isNaN(val) && val >= 0 && val <= 255){
+    if (!isNaN(val) && val >= 0 && val <= 255) {
       thresh.value = val;
-      threshVal.textContent = val.toString();
-      debouncedThresh();
+      updateThreshold();
     }
   });
   
-  threshNum.addEventListener('change', ()=>{
+  threshNum.addEventListener('change', () => {
     const val = parseInt(threshNum.value);
-    if(!isNaN(val) && val >= 0 && val <= 255){
+    if (!isNaN(val) && val >= 0 && val <= 255) {
       thresh.value = val;
-      threshVal.textContent = val.toString();
-      debouncedThresh();
+      updateThreshold();
     } else {
       threshNum.value = thresh.value;
     }
   });
 }
 
+// ---------- Elements & Config ----------
 const fileInput = document.getElementById('fileInput');
-const origCanvas = document.getElementById('origCanvas');
-const outCanvas = document.getElementById('outCanvas');
-const processBtn = document.getElementById('processBtn');
+const mainCanvas = document.getElementById('mainCanvas');
+const uploadPrompt = document.getElementById('uploadPrompt');
+const canvasTitle = document.getElementById('canvasTitle');
+const canvasControls = document.getElementById('canvasControls');
+const showOriginalBtn = document.getElementById('showOriginal');
+const showResultBtn = document.getElementById('showResult');
 const exportBtn = document.getElementById('exportBtn');
-const resetBtn  = document.getElementById('resetBtn');
-
+const resetBtn = document.getElementById('resetBtn');
 const thresh = document.getElementById('thresh');
 const threshNum = document.getElementById('threshNum');
 const threshVal = document.getElementById('threshVal');
@@ -83,56 +70,141 @@ const strokeNum = document.getElementById('strokeNum');
 const strokeVal = document.getElementById('strokeVal');
 const color = document.getElementById('color');
 const colorHex = document.getElementById('colorHex');
+const loadingModal = document.getElementById('loadingModal');
 
-
-// ---------- Tunables ----------
-const INTERNAL_SCALE = 2;             // hi-res multiplier (quality)
-const MAX_DISPLAY_DIM = 8000;       // clamp long edge to reduce memory/time
+const INTERNAL_SCALE = 4;
+const MAX_DISPLAY_DIM = 2000;
 
 // ---------- State ----------
 let origImg = null;
-let workW = 0, workH = 0;             // hi-res dims
+let workW = 0, workH = 0;
 const workCanvas = document.createElement('canvas');
+const origCanvas = document.createElement('canvas');
+const outCanvas = document.createElement('canvas');
+let alphaLoCanvas = document.createElement('canvas');
+let previewReady = false;
+let currentView = 'result'; // 'original' or 'result'
 
-// Expose globals for DOM ready functions
+// Expose globals
 window.origImg = null;
 window.origCanvas = origCanvas;
 window.prepareWorkCanvas = prepareWorkCanvas;
 window.processAll = processAll;
 
-// Preview alpha cache (downscaled alpha as canvas)
-let alphaLoCanvas = document.createElement('canvas'); // only alpha
-let previewReady = false;
+const showLoading = () => loadingModal.classList.remove('hidden');
+const hideLoading = () => loadingModal.classList.add('hidden');
 
-// Modal
-const loadingModal = document.getElementById('loadingModal');
-const showLoading = ()=> loadingModal.classList.remove('hidden');
-const hideLoading = ()=> loadingModal.classList.add('hidden');
+// ---------- View Management ----------
+function showUploadPrompt() {
+  uploadPrompt.classList.remove('hidden');
+  mainCanvas.classList.add('hidden');
+  canvasControls.classList.add('hidden');
+  canvasTitle.textContent = 'Tải ảnh chữ ký';
+}
+
+function showCanvas() {
+  uploadPrompt.classList.add('hidden');
+  mainCanvas.classList.remove('hidden');
+  canvasControls.classList.remove('hidden');
+  updateCanvasView();
+}
+
+function updateCanvasView() {
+  if (currentView === 'original') {
+    // Copy from origCanvas to mainCanvas
+    mainCanvas.width = origCanvas.width;
+    mainCanvas.height = origCanvas.height;
+    const ctx = mainCanvas.getContext('2d');
+    ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+    ctx.drawImage(origCanvas, 0, 0);
+    canvasTitle.textContent = 'Ảnh gốc';
+    showOriginalBtn.classList.add('active');
+    showResultBtn.classList.remove('active');
+  } else {
+    // Copy from outCanvas to mainCanvas
+    mainCanvas.width = outCanvas.width;
+    mainCanvas.height = outCanvas.height;
+    const ctx = mainCanvas.getContext('2d');
+    ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+    ctx.drawImage(outCanvas, 0, 0);
+    canvasTitle.textContent = 'Kết quả (xem trước)';
+    showResultBtn.classList.add('active');
+    showOriginalBtn.classList.remove('active');
+  }
+}
+
+// ---------- Drag & Drop ----------
+function setupDragDrop() {
+  const canvasBody = document.querySelector('.canvas-body');
+  
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    canvasBody.addEventListener(eventName, preventDefaults, false);
+  });
+
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    canvasBody.addEventListener(eventName, () => {
+      canvasBody.style.background = 'rgba(59, 130, 246, 0.1)';
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    canvasBody.addEventListener(eventName, () => {
+      canvasBody.style.background = '';
+    }, false);
+  });
+
+  canvasBody.addEventListener('drop', handleDrop, false);
+
+  function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length > 0) {
+      handleFile(files[0]);
+    }
+  }
+}
 
 // ---------- Helpers ----------
-function drawImageToCanvas(img, canvas, maxDim=MAX_DISPLAY_DIM){
+function drawImageToCanvas(img, canvas, maxDim = MAX_DISPLAY_DIM) {
   const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
   const w = Math.round(img.width * ratio);
   const h = Math.round(img.height * ratio);
-  canvas.width = w; canvas.height = h;
+  
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,w,h);
+  ctx.clearRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, w, h);
-  return {w, h};
+  
+  return { w, h };
 }
-function prepareWorkCanvas(displayW, displayH){
+
+function prepareWorkCanvas(displayW, displayH) {
   workW = displayW * INTERNAL_SCALE;
   workH = displayH * INTERNAL_SCALE;
   workCanvas.width = workW;
   workCanvas.height = workH;
+  
   const wctx = workCanvas.getContext('2d', { willReadFrequently: true });
   wctx.imageSmoothingEnabled = true;
   wctx.imageSmoothingQuality = 'high';
   wctx.drawImage(origCanvas, 0, 0, workW, workH);
 }
-function debounce(fn, ms=80){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+function debounce(fn, ms = 80) {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), ms);
+  };
+}
 
 // ---------- Worker (SDF) ----------
 const workerCode = `
@@ -160,144 +232,64 @@ function analyzeHistogram(gray) {
     hist[gray[i]]++;
   }
   
-  // Tìm peak chính (thường là background - màu sáng)
-  let maxCount = 0, backgroundPeak = 255;
-  for(let i = 128; i < 256; i++) { // Tìm trong vùng sáng
+  // Tìm peak của background (vùng sáng)
+  let maxCount = 0, backgroundPeak = 240;
+  for(let i = 180; i < 256; i++) {
     if(hist[i] > maxCount) {
       maxCount = hist[i];
       backgroundPeak = i;
     }
   }
   
-  // Tìm valley giữa background và foreground
-  let minCount = maxCount, valley = backgroundPeak;
-  for(let i = backgroundPeak - 50; i >= 50; i--) {
+  // Tìm peak của foreground (vùng tối)
+  let foregroundPeak = 50;
+  let maxFgCount = 0;
+  for(let i = 20; i < 120; i++) {
+    if(hist[i] > maxFgCount) {
+      maxFgCount = hist[i];
+      foregroundPeak = i;
+    }
+  }
+  
+  // Tìm valley giữa 2 peak
+  let valley = Math.round((backgroundPeak + foregroundPeak) / 2);
+  let minCount = Math.max(maxCount, maxFgCount);
+  const searchStart = Math.min(backgroundPeak, foregroundPeak + 30);
+  const searchEnd = Math.max(foregroundPeak, backgroundPeak - 30);
+  
+  for(let i = searchStart; i >= searchEnd; i--) {
     if(hist[i] < minCount) {
       minCount = hist[i];
       valley = i;
     }
   }
   
-  return { backgroundPeak, valley, histogram: hist };
+  return { backgroundPeak, foregroundPeak, valley, histogram: hist };
 }
 
 function improvedThreshold(gray) {
   const analysis = analyzeHistogram(gray);
-  
-  // Sử dụng valley làm threshold ban đầu
   let threshold = analysis.valley;
   
-  // Điều chỉnh dựa trên distribution
+  // Tính tỷ lệ pixel tối
   const total = gray.length;
   let darkPixels = 0;
   for(let i = 0; i <= threshold; i++) {
     darkPixels += analysis.histogram[i];
   }
-  
   const darkRatio = darkPixels / total;
   
-  // Nếu quá nhiều pixel tối (>30%), tăng threshold
-  if(darkRatio > 0.3) {
-    threshold = Math.min(threshold + 20, 200);
-  }
-  // Nếu quá ít pixel tối (<5%), giảm threshold  
-  else if(darkRatio < 0.05) {
-    threshold = Math.max(threshold - 20, 50);
+  // Điều chỉnh threshold dựa trên tỷ lệ
+  if (darkRatio > 0.25) {
+    threshold = Math.min(threshold + 15, analysis.backgroundPeak - 20);
+  } else if (darkRatio < 0.02) {
+    threshold = Math.max(threshold - 15, analysis.foregroundPeak + 20);
   }
   
-  return threshold;
+  return Math.max(40, Math.min(200, threshold));
 }
 
-// Cải tiến: Làm sạch noise bằng morphology
-function cleanNoise(binary, w, h) {
-  const cleaned = new Uint8Array(binary.length);
-  
-  // Erosion để loại bỏ noise nhỏ
-  for(let y = 1; y < h - 1; y++) {
-    for(let x = 1; x < w - 1; x++) {
-      const idx = y * w + x;
-      if(binary[idx] === 1) {
-        let keep = true;
-        // Kiểm tra 3x3 neighborhood
-        for(let dy = -1; dy <= 1 && keep; dy++) {
-          for(let dx = -1; dx <= 1 && keep; dx++) {
-            if(binary[(y + dy) * w + (x + dx)] === 0) {
-              keep = false;
-            }
-          }
-        }
-        cleaned[idx] = keep ? 1 : 0;
-      }
-    }
-  }
-  
-  // Dilation để khôi phục kích thước
-  const result = new Uint8Array(binary.length);
-  for(let y = 1; y < h - 1; y++) {
-    for(let x = 1; x < w - 1; x++) {
-      const idx = y * w + x;
-      let hasNeighbor = false;
-      
-      for(let dy = -1; dy <= 1 && !hasNeighbor; dy++) {
-        for(let dx = -1; dx <= 1 && !hasNeighbor; dx++) {
-          if(cleaned[(y + dy) * w + (x + dx)] === 1) {
-            hasNeighbor = true;
-          }
-        }
-      }
-      result[idx] = hasNeighbor ? 1 : 0;
-    }
-  }
-  
-  return result;
-}
-
-// Cải tiến: Component analysis để loại bỏ component nhỏ
-function removeSmallComponents(binary, w, h, minSize = 100) {
-  const visited = new Uint8Array(binary.length);
-  const result = new Uint8Array(binary.length);
-  
-  function floodFill(startIdx, component) {
-    const stack = [startIdx];
-    const pixels = [];
-    
-    while(stack.length > 0) {
-      const idx = stack.pop();
-      if(visited[idx] || binary[idx] === 0) continue;
-      
-      visited[idx] = 1;
-      pixels.push(idx);
-      
-      const y = Math.floor(idx / w);
-      const x = idx % w;
-      
-      // Thêm 4-connected neighbors
-      if(x > 0) stack.push(idx - 1);
-      if(x < w - 1) stack.push(idx + 1);
-      if(y > 0) stack.push(idx - w);
-      if(y < h - 1) stack.push(idx + w);
-    }
-    
-    return pixels;
-  }
-  
-  for(let i = 0; i < binary.length; i++) {
-    if(binary[i] === 1 && !visited[i]) {
-      const component = floodFill(i, []);
-      
-      // Chỉ giữ component đủ lớn
-      if(component.length >= minSize) {
-        for(const idx of component) {
-          result[idx] = 1;
-        }
-      }
-    }
-  }
-  
-  return result;
-}
-
-function makeSoftMask(gray, threshold, feather = 16) {
+function makeSoftMask(gray, threshold, feather = 8) {
   const len = gray.length;
   const alpha = new Uint8ClampedArray(len);
   const tLo = threshold - feather;
@@ -308,14 +300,13 @@ function makeSoftMask(gray, threshold, feather = 16) {
     let a = 0;
     
     if (g <= tLo) {
-      a = 255; // Chắc chắn là foreground (tối)
+      a = 255; // Foreground
     } else if (g >= tHi) {
-      a = 0;   // Chắc chắn là background (sáng)
+      a = 0;   // Background
     } else {
-      // Vùng chuyển tiếp - làm mềm
+      // Smooth transition
       const t = (g - tLo) / (tHi - tLo);
-      const smoothT = t * t * (3 - 2 * t); // Smoothstep
-      a = Math.round(255 * (1 - smoothT));
+      a = Math.round(255 * (1 - t * t * (3 - 2 * t)));
     }
     alpha[i] = a;
   }
@@ -443,21 +434,21 @@ self.onmessage = (e)=>{
     // Sử dụng threshold từ UI hoặc thuật toán tự động
     const t = customThreshold !== undefined ? customThreshold : improvedThreshold(gray);
     
-    // Tạo soft mask với feather nhỏ hơn để giữ chi tiết
-    let alpha = makeSoftMask(gray, t, 12);
+    // Tạo alpha mask đơn giản
+    const feather = Math.max(4, Math.min(12, Math.sqrt(workW * workH) / 200));
+    let alpha = makeSoftMask(gray, t, feather);
     
-    // Blur nhẹ để làm mượt
-    alpha = blurAlphaBox(alpha, workW, workH, 1);
+    // Blur nhẹ
+    const blurRadius = Math.max(1, Math.floor(Math.sqrt(workW * workH) / 1000));
+    alpha = blurAlphaBox(alpha, workW, workH, blurRadius);
     
     baseAlphaHi = alpha;
     
-    // Tạo binary mask và làm sạch
-    let bin = binarizeFromAlpha(alpha, 64); // Threshold thấp hơn để giữ nhiều detail
-    bin = cleanNoise(bin, workW, workH);
-    bin = removeSmallComponents(bin, workW, workH, Math.max(50, workW * workH / 5000));
+    // Binary mask đơn giản - không lọc noise
+    binHi = binarizeFromAlpha(alpha, 128);
     
     // SDF preview
-    const binPv = downscaleBin(bin, workW, workH, previewW, previewH);
+    const binPv = downscaleBin(binHi, workW, workH, previewW, previewH);
     const dInSq = edt2d(binPv, previewW, previewH);
     const invPv = new Uint8Array(binPv.length);
     for(let i = 0; i < binPv.length; i++) {
@@ -468,10 +459,9 @@ self.onmessage = (e)=>{
     for(let i = 0; i < binPv.length; i++){
       const inD = Math.sqrt(dInSq[i]);
       const outD = Math.sqrt(dOutSq[i]);
-      sdfPreview[i] = outD - inD; // positive inside, negative outside
+      sdfPreview[i] = outD - inD;
     }
     
-    binHi = bin;
     self.postMessage({type:'baseDone', threshold:t}, []);
   }
   else if(type === 'previewMorph'){
@@ -525,215 +515,303 @@ self.onmessage = (e)=>{
 const worker = new Worker(URL.createObjectURL(new Blob([workerCode], {type:'application/javascript'})));
 
 // ---------- Rendering ----------
-function renderColorWithAlphaCanvas(alphaCanvas){
-  if(!previewReady || !alphaCanvas.width || !alphaCanvas.height) return;
+function renderColorWithAlphaCanvas(alphaCanvas) {
+  if (!previewReady || !alphaCanvas.width || !alphaCanvas.height) return;
+  
   const ctx = outCanvas.getContext('2d');
   ctx.globalCompositeOperation = 'source-over';
-  ctx.clearRect(0,0,outCanvas.width,outCanvas.height);
+  ctx.clearRect(0, 0, outCanvas.width, outCanvas.height);
   ctx.fillStyle = color.value || '#000000';
-  ctx.fillRect(0,0,outCanvas.width,outCanvas.height);
+  ctx.fillRect(0, 0, outCanvas.width, outCanvas.height);
   ctx.globalCompositeOperation = 'destination-in';
   ctx.drawImage(alphaCanvas, 0, 0);
   ctx.globalCompositeOperation = 'source-over';
+  
+  // Update main canvas if showing result
+  if (currentView === 'result') {
+    updateCanvasView();
+  }
 }
-function rebuildPreviewCanvasFromMask(mask, w, h){
+
+function rebuildPreviewCanvasFromMask(mask, w, h) {
   previewReady = false;
-  outCanvas.width = w; outCanvas.height = h;
-  alphaLoCanvas.width = w; alphaLoCanvas.height = h;
+  outCanvas.width = w;
+  outCanvas.height = h;
+  alphaLoCanvas.width = w;
+  alphaLoCanvas.height = h;
+
   const actx = alphaLoCanvas.getContext('2d', { willReadFrequently: true });
   const img = actx.createImageData(w, h);
-  for(let i=0,j=0;i<img.data.length;i+=4,j++){
-    img.data[i]=0; img.data[i+1]=0; img.data[i+2]=0; img.data[i+3]=mask[j];
+  
+  for (let i = 0, j = 0; i < img.data.length; i += 4, j++) {
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 0;
+    img.data[i + 3] = mask[j];
   }
+  
   actx.putImageData(img, 0, 0);
   previewReady = true;
   renderColorWithAlphaCanvas(alphaLoCanvas);
 }
 
-// ---------- Build & Morph ----------
-async function buildBaseAsync(){
+// ---------- Build & Process ----------
+async function buildBaseAsync() {
   const wctx = workCanvas.getContext('2d', { willReadFrequently: true });
   const imgData = wctx.getImageData(0, 0, workW, workH);
   const pvW = Math.round(workW / INTERNAL_SCALE);
   const pvH = Math.round(workH / INTERNAL_SCALE);
-  
-  // Lấy threshold từ UI - sử dụng query selector động
-  const threshElement = document.getElementById('thresh');
-  const customThreshold = threshElement && threshElement.value !== undefined ? parseInt(threshElement.value) : undefined;
-  
-  return new Promise((resolve)=>{
-    const onMsg = (e)=>{
-      if(e.data && e.data.type==='baseDone'){
+  const customThreshold = thresh?.value ? parseInt(thresh.value) : undefined;
+
+  return new Promise((resolve) => {
+    const onMsg = (e) => {
+      if (e.data?.type === 'baseDone') {
         worker.removeEventListener('message', onMsg);
         resolve(e.data);
       }
     };
+    
     worker.addEventListener('message', onMsg);
     worker.postMessage({
-      type:'buildBase', 
-      imgData, 
-      width:workW, 
-      height:workH, 
-      pvW, 
+      type: 'buildBase',
+      imgData,
+      width: workW,
+      height: workH,
+      pvW,
       pvH,
       customThreshold
     });
   });
 }
-async function previewMorphAsync(strokePrevPx){
-  return new Promise((resolve)=>{
-    const onMsg = (e)=>{
-      const d = e.data;
-      if(d && d.type==='previewMask'){
+
+async function previewMorphAsync(strokePrevPx) {
+  return new Promise((resolve) => {
+    const onMsg = (e) => {
+      if (e.data?.type === 'previewMask') {
         worker.removeEventListener('message', onMsg);
-        const mask = new Uint8ClampedArray(d.mask);
-        rebuildPreviewCanvasFromMask(mask, d.w, d.h);
+        const mask = new Uint8ClampedArray(e.data.mask);
+        rebuildPreviewCanvasFromMask(mask, e.data.w, e.data.h);
         resolve();
       }
     };
+    
     worker.addEventListener('message', onMsg);
-    worker.postMessage({type:'previewMorph', strokePrevPx});
+    worker.postMessage({ type: 'previewMorph', strokePrevPx });
   });
 }
 
+async function processAll() {
+  if (!origImg) {
+    alert('Hãy tải ảnh chữ ký trước đã nhé!');
+    return;
+  }
+  
+  window.origImg = origImg;
+  previewReady = false;
+  showLoading();
+  
+  try {
+    await buildBaseAsync();
+    const sPrev = parseFloat(stroke.value) || 0;
+    await previewMorphAsync(sPrev);
+  } catch (err) {
+    console.error(err);
+    alert('Có lỗi khi xử lý ảnh.');
+  } finally {
+    hideLoading();
+  }
+}
+
 // ---------- Export ----------
-async function exportHiResMaskAsync(strokeHiPx){
-  return new Promise((resolve)=>{
-    const onMsg = (e)=>{
-      const d = e.data;
-      if(d && d.type==='exportMaskDone'){
+async function exportHiResMaskAsync(strokeHiPx) {
+  return new Promise((resolve) => {
+    const onMsg = (e) => {
+      if (e.data?.type === 'exportMaskDone') {
         worker.removeEventListener('message', onMsg);
-        resolve({mask: new Uint8ClampedArray(d.mask), w: d.w, h: d.h});
+        resolve({ mask: new Uint8ClampedArray(e.data.mask), w: e.data.w, h: e.data.h });
       }
     };
+    
     worker.addEventListener('message', onMsg);
-    worker.postMessage({type:'exportMask', strokeHiPx});
+    worker.postMessage({ type: 'exportMask', strokeHiPx });
   });
 }
-function findBoundingBox(alpha, w, h){
-  let minX=w, minY=h, maxX=-1, maxY=-1;
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      if(alpha[y*w+x] > 0){
-        if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
-      }
-    }
+
+async function exportPng() {
+  if (!origImg) {
+    alert('Chưa có kết quả để xuất.');
+    return;
   }
-  if(maxX<minX || maxY<minY) return {x:0,y:0,w:0,h:0};
-  return {x:minX, y:minY, w:maxX-minX+1, h:maxY-minY+1};
-}
-async function exportPng(){
-  if(!origImg){ alert('Chưa có kết quả để xuất.'); return; }
+  
   showLoading();
-  try{
-    const strokeHiPx = Math.round((parseFloat(stroke.value)||0) * INTERNAL_SCALE);
-    const {mask, w, h} = await exportHiResMaskAsync(strokeHiPx);
-    
-    // Tạo alpha canvas với kích thước hi-res đầy đủ (không cắt)
+  
+  try {
+    const strokeHiPx = Math.round((parseFloat(stroke.value) || 0) * INTERNAL_SCALE);
+    const { mask, w, h } = await exportHiResMaskAsync(strokeHiPx);
+
+    // Tạo alpha canvas hi-res
     const hiAlpha = document.createElement('canvas');
-    hiAlpha.width = w; // Giữ nguyên kích thước hi-res
+    hiAlpha.width = w;
     hiAlpha.height = h;
     const hctx = hiAlpha.getContext('2d', { willReadFrequently: true });
     const img = hctx.createImageData(w, h);
-    
-    // Điền toàn bộ mask vào imageData
-    for(let i = 0; i < mask.length; i++){
+
+    for (let i = 0; i < mask.length; i++) {
       const idx = i * 4;
-      img.data[idx] = 0;     // R
-      img.data[idx + 1] = 0; // G  
-      img.data[idx + 2] = 0; // B
-      img.data[idx + 3] = mask[i]; // A
+      img.data[idx] = img.data[idx + 1] = img.data[idx + 2] = 0;
+      img.data[idx + 3] = mask[i];
     }
     hctx.putImageData(img, 0, 0);
-    
-    // Downscale về kích thước ảnh gốc (giữ nguyên tỷ lệ của ảnh gốc)
-    const outW = origCanvas.width;  // Kích thước canvas hiển thị gốc
+
+    // Downscale về kích thước gốc
+    const outW = origCanvas.width;
     const outH = origCanvas.height;
-    
     const alphaOut = document.createElement('canvas');
-    alphaOut.width = outW; 
+    alphaOut.width = outW;
     alphaOut.height = outH;
     const actx = alphaOut.getContext('2d', { willReadFrequently: true });
     actx.imageSmoothingEnabled = true;
     actx.imageSmoothingQuality = 'high';
     actx.drawImage(hiAlpha, 0, 0, outW, outH);
-    
-    // Tạo ảnh cuối cùng với màu + alpha
+
+    // Tạo ảnh cuối cùng
     const final = document.createElement('canvas');
     final.width = outW;
     final.height = outH;
     const fctx = final.getContext('2d', { willReadFrequently: true });
-    
-    // Tạo nền trong suốt
     fctx.clearRect(0, 0, outW, outH);
-    
-    // Vẽ màu chữ ký
     fctx.fillStyle = color.value || '#000000';
     fctx.fillRect(0, 0, outW, outH);
-    
-    // Áp dụng alpha mask
     fctx.globalCompositeOperation = 'destination-in';
     fctx.drawImage(alphaOut, 0, 0);
-    fctx.globalCompositeOperation = 'source-over';
-    
-    // Xuất file
+
     const url = final.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url;
     a.download = 'signature.png';
     a.click();
-    
-  }catch(e){
+
+  } catch (e) {
     console.error(e);
     alert('Lỗi khi xuất PNG.');
-  }finally{
-    hideLoading();
-  }
-}
-
-// ---------- Process flow ----------
-async function processAll(){
-  if(!origImg){ alert('Hãy tải ảnh chữ ký trước đã nhé!'); return; }
-  window.origImg = origImg; // Update global reference
-  previewReady = false;
-  showLoading();
-  try{
-    await buildBaseAsync();
-    const sPrev = parseFloat(stroke.value)||0;  // preview pixels
-    await previewMorphAsync(sPrev);
-  }catch(err){
-    console.error(err);
-    alert('Có lỗi khi xử lý ảnh.'); 
-  }finally{
-    hideLoading();
-  }
-}
-
-// ---------- Event wiring ----------
-fileInput.addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
-  showLoading();
-  try {
-    const img = new Image();
-    const loadImage = new Promise((resolve, reject) => {
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('Không tải được ảnh'));
-    });
-    const reader = new FileReader();
-    reader.onload = (ev) => { img.src = ev.target.result; };
-    reader.readAsDataURL(file);
-    await loadImage;
-    const {w, h} = drawImageToCanvas(img, origCanvas);
-    origImg = img;
-    prepareWorkCanvas(w, h);
-    await processAll();
-  } catch (error) {
-    alert('Không mở được ảnh. Hãy thử file .jpg/.png/.webp');
   } finally {
     hideLoading();
   }
+}
+
+// Download button alternative for main canvas
+function downloadMainCanvas() {
+  if (!origImg) {
+    alert('Chưa có ảnh để tải');
+    return;
+  }
+  
+  const link = document.createElement('a');
+  link.download = 'signature-processed.png';
+  link.href = mainCanvas.toDataURL();
+  link.click();
+}
+
+// ---------- Process flow ----------
+async function processAll() {
+  if (!origImg) {
+    alert('Hãy tải ảnh chữ ký trước đã nhé!');
+    return;
+  }
+  
+  window.origImg = origImg;
+  previewReady = false;
+  showLoading();
+  
+  try {
+    await buildBaseAsync();
+    const sPrev = parseFloat(stroke.value) || 0;
+    await previewMorphAsync(sPrev);
+  } catch (err) {
+    console.error(err);
+    alert('Có lỗi khi xử lý ảnh.');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ---------- Event Handlers ----------
+function handleFile(file) {
+  if (!file) return;
+
+  showLoading();
+
+  loadImage(file).then(async (img) => {
+    const { w, h } = drawImageToCanvas(img, origCanvas);
+    
+    origImg = img;
+    window.origImg = origImg;
+    prepareWorkCanvas(w, h);
+
+    // Show canvas and switch to result view
+    currentView = 'result';
+    showCanvas();
+
+    await processAll();
+    showSettingsPanel();
+
+  }).catch(error => {
+    console.error('Error loading image:', error);
+    alert('Không mở được ảnh. Hãy thử file .jpg/.png/.webp khác');
+  }).finally(() => {
+    hideLoading();
+  });
+}
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  handleFile(file);
 });
+
+async function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Không tải được ảnh'));
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Canvas view controls
+showOriginalBtn.addEventListener('click', () => {
+  currentView = 'original';
+  updateCanvasView();
+});
+
+showResultBtn.addEventListener('click', () => {
+  currentView = 'result';
+  updateCanvasView();
+});
+
+function showSettingsPanel() {
+  // Deactivate all nav buttons
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  
+  // Activate settings button
+  const settingsBtn = document.querySelector('[data-target="settings"]');
+  if(settingsBtn) {
+    settingsBtn.classList.add('active');
+  }
+  
+  // Hide all panels
+  document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+  
+  // Show settings panel
+  const settingsPanel = document.getElementById('panel-settings');
+  if(settingsPanel) {
+    settingsPanel.classList.remove('hidden');
+  }
+}
+
+// Remove unused status functions
+function updateCanvasStatus() {}
+function clearCanvasStatus() {}
 
 // Sidebar nav
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -747,57 +825,80 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
   });
 });
 
-processBtn && processBtn.addEventListener('click', async () => { 
-  if(origImg){ 
-    prepareWorkCanvas(origCanvas.width, origCanvas.height); 
-    await processAll(); 
-  } 
-});
+// ---------- Settings Panel Controls ----------
+// Process button removed - auto processing on file load
 exportBtn.addEventListener('click', exportPng);
-resetBtn.addEventListener('click', ()=>{
+
+resetBtn.addEventListener('click', () => {
+  // Reset all controls
   thresh && (thresh.value = 128);
   threshNum && (threshNum.value = 128);
   threshVal && (threshVal.textContent = '128');
-  stroke.value = 0; strokeNum.value = 0; strokeVal.textContent = '0';
-  color.value = '#0000FF'; colorHex.value = '#0000FF';
+  stroke.value = 0; 
+  strokeNum.value = 0; 
+  strokeVal.textContent = '0';
+  color.value = '#0000FF'; 
+  colorHex.value = '#0000FF';
   fileInput.value = '';
+  
+  // Clear canvases
   const ctxO = origCanvas.getContext('2d');
-  ctxO.clearRect(0,0,origCanvas.width, origCanvas.height);
+  ctxO.clearRect(0, 0, origCanvas.width, origCanvas.height);
   const ctxOut = outCanvas.getContext('2d');
-  ctxOut.clearRect(0,0,outCanvas.width, outCanvas.height);
-  origImg = null; workW=0; workH=0; previewReady=false;
+  ctxOut.clearRect(0, 0, outCanvas.width, outCanvas.height);
+  const ctxMain = mainCanvas.getContext('2d');
+  ctxMain.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+  
+  // Reset state
+  origImg = null; 
+  workW = 0; 
+  workH = 0; 
+  previewReady = false;
+  currentView = 'result';
   alphaLoCanvas = document.createElement('canvas');
+  window.origImg = null;
+  
+  // Show upload prompt
+  showUploadPrompt();
+  
+  // Switch back to upload panel
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('[data-target="upload"]').classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('panel-upload').classList.remove('hidden');
 });
 
-// Note: Threshold controls are now handled in setupThresholdControls() after DOM ready
-
-const debouncedStroke = debounce(async ()=>{
-  if(!origImg) return;
-  const sPrev = parseFloat(stroke.value)||0;
+// Thickness controls with debouncing
+const debouncedStroke = debounce(async () => {
+  if (!origImg) return;
+  const sPrev = parseFloat(stroke.value) || 0;
   await previewMorphAsync(sPrev);
 }, 80);
 
-stroke.addEventListener('input', ()=>{
+stroke.addEventListener('input', () => {
   strokeVal.textContent = stroke.value;
   strokeNum.value = stroke.value;
   debouncedStroke();
 });
-stroke.addEventListener('change', ()=>{
+
+stroke.addEventListener('change', () => {
   strokeVal.textContent = stroke.value;
   strokeNum.value = stroke.value;
   debouncedStroke();
 });
-strokeNum.addEventListener('input', ()=>{
+
+strokeNum.addEventListener('input', () => {
   const val = parseFloat(strokeNum.value);
-  if(!isNaN(val) && val >= -5 && val <= 5){
+  if (!isNaN(val) && val >= -5 && val <= 5) {
     stroke.value = val;
     strokeVal.textContent = val.toString();
     debouncedStroke();
   }
 });
-strokeNum.addEventListener('change', ()=>{
+
+strokeNum.addEventListener('change', () => {
   const val = parseFloat(strokeNum.value);
-  if(!isNaN(val) && val >= -5 && val <= 5){
+  if (!isNaN(val) && val >= -5 && val <= 5) {
     stroke.value = val;
     strokeVal.textContent = val.toString();
     debouncedStroke();
@@ -806,20 +907,34 @@ strokeNum.addEventListener('change', ()=>{
   }
 });
 
-function renderPreviewColorOnly(){
-  if(previewReady && alphaLoCanvas.width && alphaLoCanvas.height){
+// Color controls
+function renderPreviewColorOnly() {
+  if (previewReady && alphaLoCanvas.width && alphaLoCanvas.height) {
     renderColorWithAlphaCanvas(alphaLoCanvas);
   }
 }
-color.addEventListener('change', ()=>{ colorHex.value = color.value; renderPreviewColorOnly(); });
-colorHex.addEventListener('input', ()=>{
-  const hex = colorHex.value.trim();
-  if(/^#[0-9A-Fa-f]{6}$/.test(hex)){ color.value = hex; renderPreviewColorOnly(); }
+
+color.addEventListener('change', () => { 
+  colorHex.value = color.value; 
+  renderPreviewColorOnly(); 
 });
-colorHex.addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter'){
+
+colorHex.addEventListener('input', () => {
+  const hex = colorHex.value.trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(hex)) { 
+    color.value = hex; 
+    renderPreviewColorOnly(); 
+  }
+});
+
+colorHex.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
     const hex = colorHex.value.trim();
-    if(/^#[0-9A-Fa-f]{6}$/.test(hex)){ color.value = hex; renderPreviewColorOnly(); }
-    else { colorHex.value = color.value; }
+    if (/^#[0-9A-Fa-f]{6}$/.test(hex)) { 
+      color.value = hex; 
+      renderPreviewColorOnly(); 
+    } else { 
+      colorHex.value = color.value; 
+    }
   }
 });
