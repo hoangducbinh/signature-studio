@@ -73,7 +73,7 @@ const colorHex = document.getElementById('colorHex');
 const loadingModal = document.getElementById('loadingModal');
 
 const INTERNAL_SCALE = 4;
-const MAX_DISPLAY_DIM = 2000;
+// Bỏ MAX_DISPLAY_DIM - hiển thị ảnh gốc 100%
 
 // ---------- State ----------
 let origImg = null;
@@ -127,7 +127,7 @@ function updateCanvasView() {
     const ctx = mainCanvas.getContext('2d');
     ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
     ctx.drawImage(outCanvas, 0, 0);
-    canvasTitle.textContent = 'Kết quả (xem trước)';
+    canvasTitle.textContent = 'Kết quả';
     showResultBtn.classList.add('active');
     showOriginalBtn.classList.remove('active');
   }
@@ -170,10 +170,10 @@ function setupDragDrop() {
 }
 
 // ---------- Helpers ----------
-function drawImageToCanvas(img, canvas, maxDim = MAX_DISPLAY_DIM) {
-  const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
-  const w = Math.round(img.width * ratio);
-  const h = Math.round(img.height * ratio);
+function drawImageToCanvas(img, canvas) {
+  // Hiển thị ảnh với kích thước gốc 100% - không scale gì cả
+  const w = img.width;
+  const h = img.height;
   
   canvas.width = w;
   canvas.height = h;

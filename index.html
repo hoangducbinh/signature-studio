@@ -56,7 +56,7 @@
             <div class="input-group">
               <label for="fileInput" class="file-label">Chọn ảnh chữ ký</label>
               <input id="fileInput" type="file" accept="image/*" />
-              <p class="hint">Chụp trên giấy trắng, ánh sáng đều, nét ký đậm để có kết quả tốt. Phần mềm sẽ tự động tách nền khi bạn tải ảnh lên.</p>
+              <p class="hint">=> Chụp trên giấy trắng, ánh sáng đều, nét ký đậm để có kết quả tốt.</br>=> Phần mềm sẽ tự động tách nền khi bạn tải ảnh lên.</p>
               <div class="btn-row">
                 <button id="resetBtn" class="btn btn-secondary">Làm mới</button>
               </div>
@@ -64,8 +64,6 @@
           </div>
 
           <div id="panel-settings" class="panel card hidden">
-            <h3 class="subsection-title">Chỉnh sửa</h3>
-            <p class="hint">Điều chỉnh các thông số để có kết quả tốt nhất. Thay đổi sẽ được cập nhật realtime.</p>
             <div class="input-group">
               <div class="field">
                 <div class="field-top">
@@ -73,7 +71,7 @@
                   <input id="threshNum" type="number" value="128" min="0" max="255" step="1" class="number" />
                 </div>
                 <input id="thresh" type="range" min="0" max="255" value="128" />
-                <div class="muted">Tăng nếu bị nhiễu ⟵ <span id="threshVal" class="bold">128</span> ⟶ Giảm nếu thiếu nét</div>
+                <p class="hint">=> Tăng nếu bị thiếu nét</br>=> Giảm nếu bị lem màu</p>
               </div>
 
               <div class="field">
@@ -82,7 +80,7 @@
                   <input id="strokeNum" type="number" value="0" min="-5" max="5" step="0.5" class="number" />
                 </div>
                 <input id="stroke" type="range" min="-5" max="5" value="0" step="0.5" />
-                <div class="muted">Làm mỏng ⟵ <span id="strokeVal" class="bold">0</span> ⟶ Làm đậm</div>
+                <p class="hint">=> Tăng để làm đậm nét</br> => Giảm để làm mỏng nét</p>
               </div>
 
               <div class="field">
@@ -109,7 +107,7 @@
 
       <!-- Preview area -->
       <div class="stage">
-        <div class="canvas-wrap card">
+        <div class="canvas-wrap card-preview">
           <div class="canvas-header">
             <div class="canvas-title" id="canvasTitle">Tải ảnh chữ ký</div>
             <div class="canvas-controls hidden" id="canvasControls">
